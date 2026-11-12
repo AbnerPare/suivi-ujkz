@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Bilan;
+use App\Models\BilanLigne;
 use App\Models\Departement;
 use App\Models\Formation;
 use App\Models\Ufr;
@@ -10,7 +12,9 @@ use App\Models\User;
 use App\Support\Notifier;
 use App\Support\Roles;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class StructureController extends Controller
 {
@@ -128,8 +132,77 @@ class StructureController extends Controller
             ->when(in_array($user->role, [Roles::DIRECTEUR, Roles::ADJOINT], true), fn ($q) => $q->where('ufr_id', $user->ufr_id))
             ->orderBy('nom')->get();
         $filtre = $request->integer('departement_id') ?: $departements->first()?->id;
-        $formations = Formation::where('departement_id', $filtre)->orderBy('filiere')->orderBy('niveau')->get();
-        return view('structures.formations', compact('departements', 'formations', 'filtre'));
+        $formations = Formation::where('departement_id', $filtre)->orderBy('ordre')->orderBy('id')->get();
+        $structure = Formation::structureDepuis($formations);
+        $peutDresser = in_array($user->role, [Roles::ADMIN, Roles::PRESIDENT, Roles::CHEF], true) && (bool) $filtre;
+
+        return view('structures.formations', compact('departements', 'formations', 'filtre', 'structure', 'peutDresser'));
+    }
+
+    public function storeTableau(Request $request)
+    {
+        $data = $request->validate([
+            'departement_id' => 'required|exists:departements,id',
+            'filieres' => 'required|array|min:1|max:30',
+            'filieres.*.nom' => 'required|string|max:180',
+            'filieres.*.niveaux' => 'required|array|min:1|max:8',
+            'filieres.*.niveaux.*' => 'required|string|max:80',
+        ]);
+
+        $dept = Departement::with('ufr')->findOrFail($data['departement_id']);
+        $this->assertFormation($request, $dept);
+
+        $noms = [];
+        foreach ($data['filieres'] as $i => $filiere) {
+            $nom = trim($filiere['nom']);
+            $clef = mb_strtolower($nom);
+            if (isset($noms[$clef])) {
+                throw ValidationException::withMessages([
+                    "filieres.$i.nom" => 'Cette filière est déjà dans le tableau.',
+                ]);
+            }
+            $noms[$clef] = true;
+            $labels = [];
+            foreach ($filiere['niveaux'] as $j => $label) {
+                $label = trim($label);
+                $clefLabel = mb_strtolower($label);
+                if (isset($labels[$clefLabel])) {
+                    throw ValidationException::withMessages([
+                        "filieres.$i.niveaux.$j" => 'Ce libellé est déjà utilisé dans la filière.',
+                    ]);
+                }
+                $labels[$clefLabel] = true;
+                $data['filieres'][$i]['niveaux'][$j] = $label;
+            }
+            $data['filieres'][$i]['nom'] = $nom;
+        }
+
+        DB::transaction(function () use ($dept, $data) {
+            Formation::where('departement_id', $dept->id)->delete();
+            $ordre = 0;
+            $creees = [];
+            foreach ($data['filieres'] as $filiere) {
+                foreach (array_values($filiere['niveaux']) as $rang => $label) {
+                    foreach (Formation::semestresDuRang($rang + 1) as $semestre) {
+                        $creees[] = Formation::create([
+                            'departement_id' => $dept->id,
+                            'filiere' => $filiere['nom'],
+                            'parcours' => $label,
+                            'niveau' => $label,
+                            'semestre' => $semestre,
+                            'ordre' => $ordre++,
+                        ]);
+                    }
+                }
+            }
+            $this->realignerBrouillons($dept, $creees);
+        });
+
+        Notifier::journal($request->user(), 'Tableau de bilan dressé', $dept->nom, count($data['filieres']).' filière(s)');
+
+        return redirect()
+            ->route('formations.index', ['departement_id' => $dept->id])
+            ->with('ok', 'Tableau de bilan enregistré. Les semestres sont en place : vous pouvez renseigner le suivi.');
     }
 
     public function storeFormation(Request $request)
@@ -203,6 +276,43 @@ class StructureController extends Controller
         }
         if ($ufr->directeur_adjoint_id) {
             User::whereKey($ufr->directeur_adjoint_id)->update(['role' => Roles::ADJOINT, 'ufr_id' => $ufr->id, 'universite_id' => $ufr->universite_id]);
+        }
+    }
+
+    private function realignerBrouillons(Departement $dept, array $formations): void
+    {
+        $bilans = Bilan::where('departement_id', $dept->id)
+            ->whereIn('statut', ['brouillon', 'retour_correction', 'corrige'])
+            ->with('lignes')
+            ->get();
+
+        foreach ($bilans as $bilan) {
+            $parLibelle = $bilan->lignes->keyBy(
+                fn ($ligne) => mb_strtolower($ligne->filiere.'|'.($ligne->parcours ?: $ligne->niveau).'|'.$ligne->semestre)
+            );
+            $parNiveau = $bilan->lignes->keyBy(
+                fn ($ligne) => mb_strtolower($ligne->filiere.'|'.$ligne->niveau.'|'.$ligne->semestre)
+            );
+            $bilan->lignes()->delete();
+            foreach ($formations as $formation) {
+                $clef = mb_strtolower($formation->filiere.'|'.$formation->parcours.'|'.$formation->semestre);
+                $precedente = $parLibelle->get($clef) ?? $parNiveau->get($clef);
+                BilanLigne::create([
+                    'bilan_id' => $bilan->id,
+                    'formation_id' => $formation->id,
+                    'filiere' => $formation->filiere,
+                    'parcours' => $formation->parcours,
+                    'niveau' => $formation->niveau,
+                    'semestre' => $formation->semestre,
+                    'ordre' => $formation->ordre,
+                    'ec_total' => $precedente?->ec_total ?? 0,
+                    'ec_effectues' => $precedente?->ec_effectues ?? 0,
+                    'ec_a_evaluer' => $precedente?->ec_a_evaluer ?? 0,
+                    'ec_evalues' => $precedente?->ec_evalues ?? 0,
+                    'deliberation' => $precedente?->deliberation ?? 0,
+                    'observations' => $precedente?->observations,
+                ]);
+            }
         }
     }
 

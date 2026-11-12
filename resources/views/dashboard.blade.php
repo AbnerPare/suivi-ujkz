@@ -26,6 +26,10 @@
     </form>
 </div>
 
+@if(auth()->user()->role === 'chef' && auth()->user()->departement && auth()->user()->departement->formations()->doesntExist())
+    <p class="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm">Votre département n'a pas encore de tableau de bilan. <a class="font-semibold underline" href="{{ route('formations.index') }}">Dressez les filières et les niveaux</a> avant de renseigner le suivi.</p>
+@endif
+
 <section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
     @foreach([
         ['Taux des cours', $stats['taux_cours'].' %'],

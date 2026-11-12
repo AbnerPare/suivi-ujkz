@@ -1,7 +1,9 @@
 @extends('layouts.app')
 @section('title', 'Bilan')
 @section('content')
-@php($user = auth()->user())
+@php
+    $user = auth()->user();
+@endphp
 <div class="mb-4 flex flex-wrap items-start justify-between gap-3">
     <div>
         <h1 class="text-2xl font-bold text-ujkz">{{ $bilan->departement->nom }}</h1>
@@ -16,50 +18,44 @@
 
 <form method="POST" action="{{ route('bilans.update', $bilan) }}">
     @csrf @method('PUT')
-    <div class="overflow-x-auto rounded-lg border bg-white">
-        <table class="min-w-[1100px] w-full text-sm">
-            <thead class="bg-slate-100 text-left">
-                <tr>
-                    <th class="px-3 py-2">Filière</th>
-                    <th class="px-3 py-2">Parcours</th>
-                    <th class="px-3 py-2">Niveau</th>
-                    <th class="px-3 py-2">Semestre</th>
-                    <th class="px-3 py-2">EC prévus</th>
-                    <th class="px-3 py-2">EC effectués</th>
-                    <th class="px-3 py-2">Taux cours</th>
-                    <th class="px-3 py-2">EC à évaluer</th>
-                    <th class="px-3 py-2">EC évalués</th>
-                    <th class="px-3 py-2">Taux éval.</th>
-                    <th class="px-3 py-2">Délibération</th>
-                    <th class="px-3 py-2">Observations</th>
-                </tr>
-            </thead>
+    <div class="overflow-x-auto rounded-lg border border-slate-400 bg-white">
+        <table class="min-w-[1200px] w-full border-collapse text-sm">
+            <thead>@include('bilans._entete')</thead>
             <tbody>
-            @foreach($bilan->lignes as $l)
-                @php($ro = ! $bilan->editablePar($user))
-                <tr class="border-t">
-                    <td class="px-3 py-2">{{ $l->filiere }}</td>
-                    <td class="px-3 py-2">{{ $l->parcours }}</td>
-                    <td class="px-3 py-2">{{ $l->niveau }}</td>
-                    <td class="px-3 py-2">{{ $l->semestre }}</td>
-                    @foreach(['ec_total','ec_effectues'] as $f)
-                        <td class="px-3 py-2"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ $l->$f }}" class="w-20 rounded border px-2 py-1" @disabled($ro)></td>
+            @forelse($groupes as $filiere)
+                @foreach($filiere['parcours'] as $pi => $parcours)
+                    @foreach($parcours['lignes'] as $li => $l)
+                        @php($ro = ! $bilan->editablePar($user))
+                        <tr>
+                            @if($loop->parent->first && $li === 0)
+                                <td rowspan="{{ $filiere['rows'] }}" class="border border-slate-300 px-2 py-2 align-middle font-medium">{{ $filiere['nom'] }}</td>
+                            @endif
+                            @if($li === 0)
+                                <td rowspan="{{ count($parcours['lignes']) }}" class="border border-slate-300 px-2 py-2 text-center align-middle">{{ $parcours['nom'] }}</td>
+                            @endif
+                            <td class="border border-slate-300 px-2 py-2 text-center">{{ $l->semestre }}</td>
+                            @foreach(['ec_total','ec_effectues'] as $f)
+                                <td class="border border-slate-300 px-2 py-2 text-center"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ $l->$f }}" class="w-20 rounded border px-2 py-1 text-center" @disabled($ro)></td>
+                            @endforeach
+                            <td class="border border-slate-300 px-2 py-2 text-center font-medium">{{ $l->tauxCours() !== null ? $l->tauxCours().' %' : '—' }}</td>
+                            @foreach(['ec_a_evaluer','ec_evalues'] as $f)
+                                <td class="border border-slate-300 px-2 py-2 text-center"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ $l->$f }}" class="w-20 rounded border px-2 py-1 text-center" @disabled($ro)></td>
+                            @endforeach
+                            <td class="border border-slate-300 px-2 py-2 text-center font-medium">{{ $l->tauxEval() !== null ? $l->tauxEval().' %' : '—' }}</td>
+                            <td class="border border-slate-300 px-2 py-2 text-center">
+                                <select name="lignes[{{ $l->id }}][deliberation]" class="rounded border px-2 py-1" @disabled($ro)>
+                                    <option value="0" @selected($l->deliberation==0)>0</option>
+                                    <option value="1" @selected($l->deliberation==1)>1</option>
+                                    <option value="2" @selected($l->deliberation==2)>2</option>
+                                </select>
+                            </td>
+                            <td class="border border-slate-300 px-2 py-2"><input name="lignes[{{ $l->id }}][observations]" value="{{ $l->observations }}" class="w-44 rounded border px-2 py-1" @disabled($ro)></td>
+                        </tr>
                     @endforeach
-                    <td class="px-3 py-2 font-medium">{{ $l->tauxCours() !== null ? $l->tauxCours().' %' : '—' }}</td>
-                    @foreach(['ec_a_evaluer','ec_evalues'] as $f)
-                        <td class="px-3 py-2"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ $l->$f }}" class="w-20 rounded border px-2 py-1" @disabled($ro)></td>
-                    @endforeach
-                    <td class="px-3 py-2 font-medium">{{ $l->tauxEval() !== null ? $l->tauxEval().' %' : '—' }}</td>
-                    <td class="px-3 py-2">
-                        <select name="lignes[{{ $l->id }}][deliberation]" class="rounded border px-2 py-1" @disabled($ro)>
-                            <option value="0" @selected($l->deliberation==0)>0 — aucune</option>
-                            <option value="1" @selected($l->deliberation==1)>1 — 1re session</option>
-                            <option value="2" @selected($l->deliberation==2)>2 — session annuelle</option>
-                        </select>
-                    </td>
-                    <td class="px-3 py-2"><input name="lignes[{{ $l->id }}][observations]" value="{{ $l->observations }}" class="w-48 rounded border px-2 py-1" @disabled($ro)></td>
-                </tr>
-            @endforeach
+                @endforeach
+            @empty
+                <tr><td colspan="11" class="px-3 py-8 text-center text-slate-500">Aucune ligne. Le chef de département doit d'abord dresser le tableau.</td></tr>
+            @endforelse
             </tbody>
         </table>
     </div>
@@ -106,7 +102,8 @@
 </form>
 @endif
 
-<section class="mt-8 grid gap-6 lg:grid-cols-2">
+<section class="mt-8 grid gap-6 {{ $user->role === 'dip' ? '' : 'lg:grid-cols-2' }}">
+    @if($user->role !== 'dip')
     <div class="rounded-lg border bg-white p-5">
         <h2 class="font-semibold">Observations</h2>
         @forelse($bilan->observations as $o)
@@ -119,6 +116,7 @@
             <p class="mt-2 text-sm text-slate-500">Aucune observation des directeurs.</p>
         @endforelse
     </div>
+    @endif
     <div class="rounded-lg border bg-white p-5">
         <h2 class="font-semibold">Historique des statuts</h2>
         <ol class="mt-3 space-y-2 text-sm">

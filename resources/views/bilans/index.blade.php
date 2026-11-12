@@ -7,7 +7,11 @@
         <p class="text-slate-600">Un bilan par département et par période mensuelle.</p>
     </div>
     @if(auth()->user()->role === 'chef')
-        <a href="{{ route('bilans.create') }}" class="rounded bg-ujkz px-4 py-2 font-semibold text-white">Nouveau bilan</a>
+        @if(auth()->user()->departement && auth()->user()->departement->formations()->doesntExist())
+            <a href="{{ route('formations.index') }}" class="rounded bg-ujkz px-4 py-2 font-semibold text-white">Dresser le tableau</a>
+        @else
+            <a href="{{ route('bilans.create') }}" class="rounded bg-ujkz px-4 py-2 font-semibold text-white">Nouveau bilan</a>
+        @endif
     @endif
 </div>
 <form class="mb-4 flex flex-wrap gap-2" method="GET">

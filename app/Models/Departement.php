@@ -13,6 +13,9 @@ class Departement extends Model
     public function ufr(): BelongsTo { return $this->belongsTo(Ufr::class); }
     public function chef(): BelongsTo { return $this->belongsTo(User::class, 'chef_id'); }
     public function adjoint(): BelongsTo { return $this->belongsTo(User::class, 'adjoint_id'); }
-    public function formations(): HasMany { return $this->hasMany(Formation::class); }
+    public function formations(): HasMany
+{
+    return $this->hasMany(Formation::class)->orderBy('ordre')->orderBy('id');
+}
     public function bilans(): HasMany { return $this->hasMany(Bilan::class); }
 }

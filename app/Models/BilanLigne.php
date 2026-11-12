@@ -9,7 +9,7 @@ class BilanLigne extends Model
 {
     protected $fillable = [
         'bilan_id', 'formation_id', 'filiere', 'parcours', 'niveau', 'semestre',
-        'ec_total', 'ec_effectues', 'ec_a_evaluer', 'ec_evalues', 'deliberation', 'observations',
+        'ec_total', 'ec_effectues', 'ec_a_evaluer', 'ec_evalues', 'deliberation', 'observations', 'ordre',
     ];
 
     public function bilan(): BelongsTo { return $this->belongsTo(Bilan::class); }

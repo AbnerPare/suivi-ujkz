@@ -43,6 +43,9 @@ class BilanController extends Controller
         $user = $request->user();
         abort_unless($user->role === Roles::CHEF && $user->departement_id, 403, 'Seul un chef de département peut saisir un bilan.');
         $departement = Departement::with('formations', 'ufr')->findOrFail($user->departement_id);
+        if ($departement->formations->isEmpty()) {
+            return redirect()->route('formations.index')->with('ok', 'Dressez d\'abord le tableau de bilan de votre département : filières, niveaux et semestres.');
+        }
         $periodes = Periode::where('ouverte', true)
             ->whereHas('campagne.annee', fn ($q) => $q->where('universite_id', $user->universite_id)->where('statut', 'ouverte'))
             ->whereHas('campagne', fn ($q) => $q->where('statut', 'ouverte'))
@@ -65,6 +68,9 @@ class BilanController extends Controller
         }
 
         $departement = Departement::with('formations')->findOrFail($user->departement_id);
+        if ($departement->formations->isEmpty()) {
+            return redirect()->route('formations.index')->with('ok', 'Dressez d\'abord le tableau de bilan de votre département.');
+        }
         $bilan = DB::transaction(function () use ($user, $periode, $departement) {
             $bilan = Bilan::create([
                 'universite_id' => $user->universite_id,
@@ -81,6 +87,7 @@ class BilanController extends Controller
                     'parcours' => $f->parcours,
                     'niveau' => $f->niveau,
                     'semestre' => $f->semestre,
+                    'ordre' => $f->ordre,
                 ]);
             }
             BilanHistorique::create(['bilan_id' => $bilan->id, 'user_id' => $user->id, 'de' => null, 'vers' => 'brouillon', 'commentaire' => 'Création du bilan']);
@@ -95,8 +102,23 @@ class BilanController extends Controller
     {
         $this->authorizeView($request->user(), $bilan);
         $bilan->load(['lignes', 'observations.auteur', 'historiques.auteur', 'snapshots.auteur', 'departement.ufr', 'periode', 'annee']);
+        $groupes = [];
+        foreach ($bilan->lignes as $ligne) {
+            $nom = $ligne->filiere;
+            $label = ($ligne->parcours && $ligne->niveau && $ligne->parcours !== $ligne->niveau)
+                ? $ligne->niveau
+                : ($ligne->parcours ?: $ligne->niveau);
+            if (! isset($groupes[$nom])) {
+                $groupes[$nom] = ['nom' => $nom, 'rows' => 0, 'parcours' => []];
+            }
+            if (! isset($groupes[$nom]['parcours'][$label])) {
+                $groupes[$nom]['parcours'][$label] = ['nom' => $label, 'lignes' => []];
+            }
+            $groupes[$nom]['parcours'][$label]['lignes'][] = $ligne;
+            $groupes[$nom]['rows']++;
+        }
 
-        return view('bilans.edit', compact('bilan'));
+        return view('bilans.edit', compact('bilan', 'groupes'));
     }
 
     public function update(Request $request, Bilan $bilan)

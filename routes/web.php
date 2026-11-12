@@ -46,6 +46,7 @@ Route::middleware('auth')->group(function () {
     Route::delete('/departements/{departement}', [StructureController::class, 'destroyDepartement'])->name('departements.destroy');
 
     Route::get('/formations', [StructureController::class, 'formations'])->name('formations.index');
+    Route::post('/formations/tableau', [StructureController::class, 'storeTableau'])->name('formations.tableau');
     Route::post('/formations', [StructureController::class, 'storeFormation'])->name('formations.store');
     Route::delete('/formations/{formation}', [StructureController::class, 'destroyFormation'])->name('formations.destroy');
 

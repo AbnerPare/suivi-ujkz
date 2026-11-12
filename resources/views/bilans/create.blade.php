@@ -2,7 +2,7 @@
 @section('title', 'Nouveau bilan')
 @section('content')
 <h1 class="text-2xl font-bold text-ujkz">Saisir un bilan</h1>
-<p class="mt-1 text-slate-600">{{ $departement->ufr->sigle }} — {{ $departement->nom }}. {{ $departement->formations->count() }} formation(s) seront reprises dans le tableau.</p>
+<p class="mt-1 text-slate-600">{{ $departement->ufr->sigle }} — {{ $departement->nom }}. Le tableau déjà dressé compte {{ $departement->formations->count() }} ligne(s). <a class="underline" href="{{ route('formations.index') }}">Revoir la structure</a>.</p>
 <form method="POST" action="{{ route('bilans.store') }}" class="mt-6 max-w-lg space-y-4 rounded-lg border bg-white p-6">
     @csrf
     <label class="block text-sm font-medium">Période de suivi ouverte</label>

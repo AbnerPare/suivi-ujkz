@@ -21,7 +21,10 @@ class Bilan extends Model
     public function annee(): BelongsTo { return $this->belongsTo(AnneeAcademique::class, 'annee_academique_id'); }
     public function campagne(): BelongsTo { return $this->belongsTo(Campagne::class); }
     public function periode(): BelongsTo { return $this->belongsTo(Periode::class); }
-    public function lignes(): HasMany { return $this->hasMany(BilanLigne::class); }
+    public function lignes(): HasMany
+{
+    return $this->hasMany(BilanLigne::class)->orderBy('ordre')->orderBy('id');
+}
     public function observations(): HasMany { return $this->hasMany(BilanObservation::class); }
     public function historiques(): HasMany { return $this->hasMany(BilanHistorique::class); }
     public function snapshots(): HasMany { return $this->hasMany(BilanSnapshot::class); }

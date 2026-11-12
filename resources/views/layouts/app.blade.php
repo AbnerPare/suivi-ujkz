@@ -24,7 +24,7 @@
         $links = [
             ['dashboard', 'Tableau de bord', true],
             ['bilans.index', 'Bilans', $u->voitBilans()],
-            ['formations.index', 'Formations', in_array($u->role, ['admin','president','chef','directeur_ufr','directeur_adjoint'])],
+            ['formations.index', 'Tableau', in_array($u->role, ['admin','president','chef','directeur_ufr','directeur_adjoint'])],
             ['ufrs.index', 'UFR / Instituts', in_array($u->role, ['admin','president','dip','directeur_ufr','vice_president'])],
             ['departements.index', 'Départements', in_array($u->role, ['admin','president','dip','directeur_ufr','vice_president'])],
             ['annees.index', 'Campagnes', in_array($u->role, ['admin','president','dip','vice_president'])],
