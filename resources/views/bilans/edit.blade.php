@@ -25,7 +25,9 @@
             @forelse($groupes as $filiere)
                 @foreach($filiere['parcours'] as $pi => $parcours)
                     @foreach($parcours['lignes'] as $li => $l)
-                        @php($ro = ! $bilan->editablePar($user))
+                        @php
+                            $ro = ! $bilan->editablePar($user);
+                        @endphp
                         <tr>
                             @if($loop->parent->first && $li === 0)
                                 <td rowspan="{{ $filiere['rows'] }}" class="border border-slate-300 px-2 py-2 align-middle font-medium">{{ $filiere['nom'] }}</td>
@@ -35,21 +37,24 @@
                             @endif
                             <td class="border border-slate-300 px-2 py-2 text-center">{{ $l->semestre }}</td>
                             @foreach(['ec_total','ec_effectues'] as $f)
-                                <td class="border border-slate-300 px-2 py-2 text-center"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ $l->$f }}" class="w-20 rounded border px-2 py-1 text-center" @disabled($ro)></td>
+                                <td class="border border-slate-300 px-2 py-2 text-center"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ old('lignes.'.$l->id.'.'.$f, $l->$f) }}" title="{{ $errors->first('lignes.'.$l->id.'.'.$f) }}" class="w-20 rounded border px-2 py-1 text-center @if($errors->has('lignes.'.$l->id.'.'.$f)) border-red-600 bg-red-50 text-red-700 underline decoration-red-600 decoration-2 @endif" @disabled($ro)></td>
                             @endforeach
                             <td class="border border-slate-300 px-2 py-2 text-center font-medium">{{ $l->tauxCours() !== null ? $l->tauxCours().' %' : '—' }}</td>
                             @foreach(['ec_a_evaluer','ec_evalues'] as $f)
-                                <td class="border border-slate-300 px-2 py-2 text-center"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ $l->$f }}" class="w-20 rounded border px-2 py-1 text-center" @disabled($ro)></td>
+                                <td class="border border-slate-300 px-2 py-2 text-center"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ old('lignes.'.$l->id.'.'.$f, $l->$f) }}" title="{{ $errors->first('lignes.'.$l->id.'.'.$f) }}" class="w-20 rounded border px-2 py-1 text-center @if($errors->has('lignes.'.$l->id.'.'.$f)) border-red-600 bg-red-50 text-red-700 underline decoration-red-600 decoration-2 @endif" @disabled($ro)></td>
                             @endforeach
                             <td class="border border-slate-300 px-2 py-2 text-center font-medium">{{ $l->tauxEval() !== null ? $l->tauxEval().' %' : '—' }}</td>
+                            @php
+                                $deliberation = old('lignes.'.$l->id.'.deliberation', $l->deliberation);
+                            @endphp
                             <td class="border border-slate-300 px-2 py-2 text-center">
-                                <select name="lignes[{{ $l->id }}][deliberation]" class="rounded border px-2 py-1" @disabled($ro)>
-                                    <option value="0" @selected($l->deliberation==0)>0</option>
-                                    <option value="1" @selected($l->deliberation==1)>1</option>
-                                    <option value="2" @selected($l->deliberation==2)>2</option>
+                                <select name="lignes[{{ $l->id }}][deliberation]" class="rounded border px-2 py-1 @if($errors->has('lignes.'.$l->id.'.deliberation')) border-red-600 bg-red-50 text-red-700 underline decoration-red-600 @endif" @disabled($ro)>
+                                    <option value="0" @selected((string) $deliberation === '0')>0</option>
+                                    <option value="1" @selected((string) $deliberation === '1')>1</option>
+                                    <option value="2" @selected((string) $deliberation === '2')>2</option>
                                 </select>
                             </td>
-                            <td class="border border-slate-300 px-2 py-2"><input name="lignes[{{ $l->id }}][observations]" value="{{ $l->observations }}" class="w-44 rounded border px-2 py-1" @disabled($ro)></td>
+                            <td class="border border-slate-300 px-2 py-2"><input name="lignes[{{ $l->id }}][observations]" value="{{ old('lignes.'.$l->id.'.observations', $l->observations) }}" class="w-44 rounded border px-2 py-1 {{ $errors->has('lignes.'.$l->id.'.observations') ? 'border-red-600 bg-red-50 text-red-700 underline decoration-red-600 decoration-2' : '' }}" @disabled($ro)></td>
                         </tr>
                     @endforeach
                 @endforeach
@@ -61,7 +66,7 @@
     </div>
     <div class="mt-4">
         <label class="mb-1 block text-sm font-medium">Observations générales du chef de département</label>
-        <textarea name="commentaire_chef" rows="3" class="w-full rounded border px-3 py-2" @disabled(! $bilan->editablePar($user))>{{ $bilan->commentaire_chef }}</textarea>
+        <textarea name="commentaire_chef" rows="3" class="w-full rounded border px-3 py-2" @disabled(! $bilan->editablePar($user))>{{ old('commentaire_chef', $bilan->commentaire_chef) }}</textarea>
     </div>
     @if($bilan->editablePar($user))
         <button class="mt-3 rounded bg-slate-800 px-4 py-2 font-semibold text-white">Enregistrer</button>

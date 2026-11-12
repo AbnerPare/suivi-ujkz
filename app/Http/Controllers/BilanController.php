@@ -137,10 +137,20 @@ class BilanController extends Controller
             'lignes.*.observations' => 'nullable|string|max:2000',
         ]);
 
+        $erreurs = [];
         foreach ($data['lignes'] as $id => $row) {
-            if ($row['ec_effectues'] > $row['ec_total'] || $row['ec_evalues'] > $row['ec_a_evaluer']) {
-                throw ValidationException::withMessages(['lignes' => 'Les éléments effectués ou évalués ne peuvent pas dépasser le total prévu.']);
+            if ($row['ec_effectues'] > $row['ec_total']) {
+                $erreurs["lignes.$id.ec_effectues"] = 'Les éléments effectués ne peuvent pas dépasser le total prévu.';
             }
+            if ($row['ec_evalues'] > $row['ec_a_evaluer']) {
+                $erreurs["lignes.$id.ec_evalues"] = 'Les éléments évalués ne peuvent pas dépasser le total à évaluer.';
+            }
+        }
+        if ($erreurs !== []) {
+            throw ValidationException::withMessages($erreurs);
+        }
+
+        foreach ($data['lignes'] as $id => $row) {
             $ligne = BilanLigne::where('bilan_id', $bilan->id)->find($id);
             if ($ligne) {
                 $ligne->update($row);

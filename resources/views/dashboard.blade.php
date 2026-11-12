@@ -50,8 +50,8 @@
 
 <section class="mt-8 grid gap-6 lg:grid-cols-2">
     <div class="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 class="mb-3 font-semibold">Comparaison des UFR et instituts</h2>
-        <canvas id="chartUfr" height="180"></canvas>
+        <h2 class="mb-3 font-semibold">{{ $comparaisonTitre }}</h2>
+        <canvas id="chartComparaison" height="180"></canvas>
     </div>
     <div class="rounded-lg border border-slate-200 bg-white p-5">
         <h2 class="mb-3 font-semibold">Évolution mensuelle des cours</h2>
@@ -84,18 +84,24 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
 <script>
-const ufr = @json($parUfr);
+const comparaison = @json($comparaison);
 const mois = @json($parMois);
-new Chart(document.getElementById('chartUfr'), {
+new Chart(document.getElementById('chartComparaison'), {
     type: 'bar',
     data: {
-        labels: ufr.map(x => x.nom),
+        labels: comparaison.map(x => x.nom),
         datasets: [
-            { label: 'Cours (%)', data: ufr.map(x => x.cours), backgroundColor: '#1e3a8a' },
-            { label: 'Évaluations (%)', data: ufr.map(x => x.eval), backgroundColor: '#f59e0b' },
+            { label: 'Cours (%)', data: comparaison.map(x => x.cours), backgroundColor: '#1e3a8a' },
+            { label: 'Évaluations (%)', data: comparaison.map(x => x.eval), backgroundColor: '#f59e0b' },
         ]
     },
-    options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
+    options: {
+        responsive: true,
+        scales: {
+            y: { min: 0, max: 100 },
+            x: { ticks: { autoSkip: false, maxRotation: 50, minRotation: 0 } }
+        }
+    }
 });
 new Chart(document.getElementById('chartMois'), {
     type: 'line',
