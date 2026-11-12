@@ -1,0 +1,3 @@
+@php($labels = ['brouillon'=>'Brouillon','attente_adjoint'=>'Attente adjoint','attente_directeur'=>'Attente directeur','retour_correction'=>'Retour correction','corrige'=>'Corrigé','officiel'=>'Officiel'])
+@php($colors = ['brouillon'=>'bg-slate-100 text-slate-700','attente_adjoint'=>'bg-amber-100 text-amber-900','attente_directeur'=>'bg-orange-100 text-orange-900','retour_correction'=>'bg-rose-100 text-rose-800','corrige'=>'bg-sky-100 text-sky-900','officiel'=>'bg-emerald-100 text-emerald-800'])
+<span class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold {{ $colors[$statut] ?? 'bg-slate-100' }}">{{ $labels[$statut] ?? $statut }}</span>
