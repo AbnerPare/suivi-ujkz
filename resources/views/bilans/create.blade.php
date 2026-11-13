@@ -12,7 +12,7 @@
         @endforeach
     </select>
     @if($periodes->isEmpty())
-        <p class="text-sm text-amber-700">Aucune période ouverte. Le président doit ouvrir une campagne et un mois de suivi.</p>
+        <p class="text-sm text-amber-700">Aucune période ouverte. Le vice-président ou le Directeur des Innovations Pédagogiques doit ouvrir une campagne et un mois de suivi.</p>
     @endif
     <button class="rounded bg-ujkz px-4 py-2 font-semibold text-white" @disabled($periodes->isEmpty())>Créer le brouillon</button>
 </form>

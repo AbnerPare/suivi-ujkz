@@ -4,7 +4,7 @@
 <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
     <div>
         <h1 class="text-2xl font-bold text-ujkz">Tableau de bilan</h1>
-        <p class="mt-1 max-w-3xl text-slate-600">Le chef de département dresse d'abord la grille. Pour chaque filière, il indique le nombre de niveaux et le libellé de chacun. Ce libellé occupe la colonne Parcours. Le premier niveau reçoit S1 et S2, le deuxième S3 et S4, le troisième S5 et S6, et ainsi de suite. Ces semestres occupent la colonne Niveau. Le suivi des EC se remplit ensuite, période par période.</p>
+        <p class="mt-1 max-w-3xl text-slate-600">Le chef de département dresse d'abord la grille. Pour chaque filière, il indique les libellés dans l'ordre voulu. Cet ordre n'est pas numéroté. Chaque libellé occupe la colonne Parcours, avec S1 et S2 dans la colonne Niveau. Le suivi des EC se remplit ensuite, période par période.</p>
     </div>
     @if($departements->count() > 1)
         <form method="GET">
@@ -45,9 +45,8 @@
         const depart = document.getElementById('filieres');
         const apercu = document.getElementById('apercu');
 
-        function semestres(rang) {
-            const debut = (rang - 1) * 2 + 1;
-            return ['S' + debut, 'S' + (debut + 1)];
+        function semestres() {
+            return ['S1', 'S2'];
         }
 
         function blocVide() {
@@ -108,11 +107,10 @@
                 const liste = document.createElement('div');
                 liste.className = 'mt-4 space-y-2';
                 filiere.niveaux.forEach((label, j) => {
-                    const [s1, s2] = semestres(j + 1);
+                    const [s1, s2] = semestres();
                     const row = document.createElement('div');
-                    row.className = 'grid items-center gap-3 sm:grid-cols-[7rem_1fr_auto]';
+                    row.className = 'grid items-center gap-3 sm:grid-cols-[1fr_auto]';
                     row.innerHTML = `
-                        <span class="text-sm font-medium text-slate-600">Niveau ${j + 1}</span>
                         <label class="block text-sm">Libellé de la colonne Parcours
                             <input name="filieres[${i}][niveaux][${j}]" value="" required maxlength="80" class="mt-1 w-full rounded border px-3 py-2">
                         </label>
@@ -136,7 +134,7 @@
             filieres.forEach((filiere) => {
                 const lignes = [];
                 filiere.niveaux.forEach((label, j) => {
-                    semestres(j + 1).forEach((semestre) => lignes.push({ label: label || '—', semestre }));
+                    semestres().forEach((semestre) => lignes.push({ label: label || '—', semestre }));
                 });
                 const groupes = [];
                 lignes.forEach((ligne) => {

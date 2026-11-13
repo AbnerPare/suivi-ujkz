@@ -20,26 +20,23 @@ Si la base contient déjà l'ancienne version (cours / heures CM-TD-TP), relance
 | Rôle | Email |
 |---|---|
 | Administrateur système | admin@ujkz.bf |
-| Président UJKZ | president@ujkz.bf |
+| Administrateur de l'université | admin.ujkz@ujkz.bf |
 | Vice-président | vp@ujkz.bf |
-| Secrétaire de séance | secretaire@ujkz.bf |
 | Directeur des Innovations Pédagogiques | dip@ujkz.bf |
-| Directeur UFR SEA | directeur@ujkz.bf |
 | Directeur adjoint UFR SEA | adjoint@ujkz.bf |
 | Chef de département Informatique | chef@ujkz.bf |
 | Chef de département Mathématiques | maths@ujkz.bf |
 
-Une autre université peut créer son espace depuis la page d'inscription. Elle démarre isolée, avec le compte président.
+L'administrateur système crée chaque université et désigne son administrateur. Cet administrateur crée les UFR, les départements, puis désigne le chef de chaque département et le directeur adjoint de chaque UFR. Le chef suit son département, le directeur adjoint voit les départements de son UFR, et le vice-président comme le DIP voient les bilans de tous les départements, regroupés par UFR.
 
 ## Circuit d'un bilan
 
 Le tableau reprend les colonnes du fichier Excel : filière, parcours, niveau, semestre, éléments constitutifs prévus / effectués, éléments à évaluer / évalués, délibération (0, 1 ou 2) et observations.
 
 1. Le chef de département saisit le brouillon et le transmet au directeur adjoint.
-2. Le directeur adjoint observe et valide : le bilan part au directeur d'UFR, sans retour anticipé.
-3. Le directeur d'UFR observe et valide : le bilan revient au chef avec les deux jeux d'observations.
-4. Le chef corrige, puis transmet la version officielle au Directeur des Innovations Pédagogiques.
-5. Une réouverture (DIP ou président) conserve la version officielle et renvoie le bilan au chef.
+2. Le directeur adjoint observe et valide : le bilan revient au chef de département.
+3. Le chef corrige, puis transmet la version officielle au Directeur des Innovations Pédagogiques et au vice-président. Ils voient le même bilan, sans les observations internes du circuit.
+4. Une réouverture (DIP, vice-président ou administrateur) conserve la version officielle et renvoie le bilan au chef.
 
 ## Autres modules
 

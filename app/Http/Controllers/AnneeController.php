@@ -14,7 +14,7 @@ class AnneeController extends Controller
 {
     public function index(Request $request)
     {
-        abort_unless(in_array($request->user()->role, [Roles::ADMIN, Roles::PRESIDENT, Roles::DIP, Roles::VICE], true), 403);
+        abort_unless(in_array($request->user()->role, [Roles::ADMIN, Roles::ADMIN_UNIV, Roles::DIP, Roles::VICE], true), 403);
         if ($request->user()->isAdmin() && ! $request->query('universite_id')) {
             $universites = Universite::orderBy('nom')->get();
             return view('structures.choisir', compact('universites'));
@@ -23,7 +23,7 @@ class AnneeController extends Controller
             ? (int) $request->query('universite_id')
             : (int) $request->user()->universite_id;
         $annees = AnneeAcademique::with('campagnes.periodes')->where('universite_id', $universiteId)->orderByDesc('libelle')->get();
-        $editable = in_array($request->user()->role, [Roles::ADMIN, Roles::PRESIDENT], true);
+        $editable = $request->user()->ouvreCampagnes();
         return view('annees.index', compact('annees', 'editable', 'universiteId'));
     }
 
@@ -99,7 +99,7 @@ class AnneeController extends Controller
 
     private function write(Request $request): void
     {
-        abort_unless(in_array($request->user()->role, [Roles::ADMIN, Roles::PRESIDENT], true), 403);
+        abort_unless($request->user()->ouvreCampagnes(), 403);
     }
 
     private function uid(Request $request): int

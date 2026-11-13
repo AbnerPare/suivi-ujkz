@@ -4,6 +4,12 @@
 <div class="mb-6 flex flex-wrap items-end justify-between gap-3">
     <div>
         <h1 class="text-2xl font-bold text-ujkz">Tableau de bord</h1>
+        @if($etablissement)
+            <p class="mt-1 text-lg font-semibold text-slate-800">{{ $etablissement['nom'] }}</p>
+        @endif
+        @if(auth()->user()->role === 'chef')
+            <p class="mt-1 text-lg font-semibold text-slate-800">{{ $departementChef->nom ?? 'Département non attribué' }}</p>
+        @endif
         <p class="text-slate-600">
             {{ $annee?->libelle ?? 'Aucune année académique' }}
             @if($periode) · {{ $periode->libelle }} @endif
@@ -30,12 +36,12 @@
     <p class="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm">Votre département n'a pas encore de tableau de bilan. <a class="font-semibold underline" href="{{ route('formations.index') }}">Dressez les filières et les niveaux</a> avant de renseigner le suivi.</p>
 @endif
 
-<section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+@if($etablissement)
+<section class="mb-4 grid gap-4 sm:grid-cols-3">
     @foreach([
-        ['Taux des cours', $stats['taux_cours'].' %'],
-        ['Taux des évaluations', $stats['taux_eval'].' %'],
-        ['Bilans officiels', $stats['officiels'].' / '.$stats['bilans']],
-        ['Bilans en retard (< 50 %)', $stats['retards']],
+        ['UFR', $etablissement['ufrs']],
+        ['Instituts', $etablissement['instituts']],
+        ['Départements', $etablissement['departements']],
     ] as [$label, $val])
         <div class="rounded-lg border border-slate-200 bg-white p-4">
             <p class="text-sm text-slate-500">{{ $label }}</p>
@@ -43,21 +49,56 @@
         </div>
     @endforeach
 </section>
-
-@if($prochaine)
-    <p class="mt-4 rounded border border-blue-200 bg-blue-50 px-4 py-3 text-sm">Prochaine réunion : <a class="font-semibold underline" href="{{ route('reunions.show', $prochaine) }}">{{ $prochaine->titre }}</a> le {{ $prochaine->date_seance->format('d/m/Y H:i') }}.</p>
 @endif
 
-<section class="mt-8 grid gap-6 lg:grid-cols-2">
-    <div class="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 class="mb-3 font-semibold">{{ $comparaisonTitre }}</h2>
-        <canvas id="chartComparaison" height="180"></canvas>
+@if(auth()->user()->role !== 'directeur_adjoint')
+<section class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    @include('dashboard._indicateurs', ['stats' => $stats])
+</section>
+@endif
+
+@if($prochaine)
+    <p class="mt-4 rounded border border-ujkz/20 bg-ujkz-light px-4 py-3 text-sm">Prochaine réunion : <a class="font-semibold underline" href="{{ route('reunions.show', $prochaine) }}">{{ $prochaine->titre }}</a> le {{ $prochaine->date_seance->format('d/m/Y H:i') }}.</p>
+@endif
+
+@if($cartesUfr !== null && ! $ufrOuverte)
+    <div class="mt-8 grid gap-4 sm:grid-cols-2">
+        @forelse($cartesUfr as $carte)
+            <a href="{{ route('dashboard', array_merge(request()->query(), ['ufr_id' => $carte['id']])) }}" class="rounded-lg border border-slate-200 bg-white p-5 hover:border-ujkz">
+                <h2 class="text-lg font-semibold text-ujkz">{{ $carte['nom'] }}</h2>
+                <p class="mt-1 text-sm text-slate-500">{{ $carte['departements'] }} département(s)</p>
+                <p class="mt-3 text-sm">Cours <span class="text-2xl font-bold text-ujkz">{{ $carte['taux_cours'] }} %</span> <span class="text-slate-400">·</span> Évaluations <span class="text-2xl font-bold text-ujkz">{{ $carte['taux_eval'] }} %</span></p>
+            </a>
+        @empty
+            <p class="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-500 sm:col-span-2">Aucun bilan transmis.</p>
+        @endforelse
     </div>
-    <div class="rounded-lg border border-slate-200 bg-white p-5">
-        <h2 class="mb-3 font-semibold">Évolution mensuelle des cours</h2>
-        <canvas id="chartMois" height="180"></canvas>
+@else
+@if($ufrOuverte)
+    <a href="{{ route('dashboard', request()->except('ufr_id')) }}" class="mt-8 inline-block text-sm font-semibold text-ujkz underline">Toutes les UFR</a>
+    <h2 class="mt-2 text-xl font-bold text-ujkz">{{ $ufrOuverte['nom'] }}</h2>
+@endif
+@if($graphiques->isNotEmpty())
+    <p class="mt-4 text-sm text-slate-600">Chaque graphique correspond au dernier bilan transmis du département.</p>
+@endif
+@forelse($graphiques as $i => $graphique)
+<section class="mt-8">
+    <h2 class="mb-3 text-lg font-semibold text-ujkz">{{ $graphique['titre'] }}</h2>
+    @if(! empty($graphique['stats']))
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            @include('dashboard._indicateurs', ['stats' => $graphique['stats']])
+        </div>
+    @endif
+    <div class="mt-4 rounded-lg border border-slate-200 bg-white p-5">
+        <canvas id="chart-{{ $i }}" height="110"></canvas>
     </div>
 </section>
+@empty
+<section class="mt-8 rounded-lg border border-slate-200 bg-white p-5">
+    <p class="text-center text-slate-500">Aucun bilan transmis.</p>
+</section>
+@endforelse
+@endif
 
 @if($mesures->isNotEmpty())
 <section class="mt-8 rounded-lg border border-rose-200 bg-white p-5">
@@ -70,6 +111,7 @@
 </section>
 @endif
 
+@if(! auth()->user()->recoitBilansOfficiels())
 <section class="mt-8 rounded-lg border border-slate-200 bg-white">
     <h2 class="border-b px-5 py-4 font-semibold">Dossiers à suivre</h2>
     @forelse($file as $b)
@@ -81,32 +123,29 @@
         <p class="px-5 py-8 text-center text-slate-500">Aucun bilan dans votre périmètre.</p>
     @endforelse
 </section>
+@endif
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
 <script>
-const comparaison = @json($comparaison);
-const mois = @json($parMois);
-new Chart(document.getElementById('chartComparaison'), {
-    type: 'bar',
-    data: {
-        labels: comparaison.map(x => x.nom),
-        datasets: [
-            { label: 'Cours (%)', data: comparaison.map(x => x.cours), backgroundColor: '#1e3a8a' },
-            { label: 'Évaluations (%)', data: comparaison.map(x => x.eval), backgroundColor: '#f59e0b' },
-        ]
-    },
-    options: {
-        responsive: true,
-        scales: {
-            y: { min: 0, max: 100 },
-            x: { ticks: { autoSkip: false, maxRotation: 50, minRotation: 0 } }
+const graphiques = @json($graphiques);
+graphiques.forEach(function (graphique, i) {
+    new Chart(document.getElementById('chart-' + i), {
+        type: 'bar',
+        data: {
+            labels: graphique.barres.map(x => x.nom),
+            datasets: [
+                { label: 'Cours (%)', data: graphique.barres.map(x => x.cours), backgroundColor: '#1E3A5F' },
+                { label: 'Évaluations (%)', data: graphique.barres.map(x => x.eval), backgroundColor: '#7C93A8' },
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { min: 0, max: 100 },
+                x: { ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 } }
+            }
         }
-    }
-});
-new Chart(document.getElementById('chartMois'), {
-    type: 'line',
-    data: { labels: mois.map(x => x.mois), datasets: [{ label: 'Taux officiel des cours', data: mois.map(x => x.taux), borderColor: '#1e3a8a', tension: 0.2 }] },
-    options: { responsive: true, scales: { y: { min: 0, max: 100 } } }
+    });
 });
 </script>
 @endsection

@@ -27,7 +27,7 @@ class StructureController extends Controller
         $universiteId = $this->universiteId($request);
         $ufrs = Ufr::with(['directeur', 'adjoint', 'departements'])->where('universite_id', $universiteId)->orderBy('nom')->get();
         $personnes = User::where('universite_id', $universiteId)->where('actif', true)->orderBy('name')->get();
-        return view('structures.ufrs', compact('ufrs', 'personnes'));
+        return view('structures.ufrs', compact('ufrs', 'personnes', 'universiteId'));
     }
 
     public function storeUfr(Request $request)
@@ -37,10 +37,10 @@ class StructureController extends Controller
             'nom' => 'required|string|max:180',
             'sigle' => 'nullable|string|max:20',
             'type' => 'required|in:ufr,institut',
-            'directeur_id' => 'nullable|exists:users,id',
             'directeur_adjoint_id' => 'nullable|exists:users,id',
         ]);
         $data['universite_id'] = $this->universiteId($request);
+        $data['directeur_id'] = null;
         $ufr = Ufr::create($data);
         $this->syncResponsables($ufr);
         Notifier::journal($request->user(), 'Création d\'une UFR', $ufr->nom);
@@ -55,9 +55,9 @@ class StructureController extends Controller
             'nom' => 'required|string|max:180',
             'sigle' => 'nullable|string|max:20',
             'type' => 'required|in:ufr,institut',
-            'directeur_id' => 'nullable|exists:users,id',
             'directeur_adjoint_id' => 'nullable|exists:users,id',
         ]);
+        $data['directeur_id'] = null;
         $ufr->update($data);
         $this->syncResponsables($ufr);
         return back()->with('ok', 'UFR mise à jour.');
@@ -125,16 +125,16 @@ class StructureController extends Controller
     public function formations(Request $request)
     {
         $user = $request->user();
-        abort_unless(in_array($user->role, [Roles::ADMIN, Roles::PRESIDENT, Roles::CHEF, Roles::DIRECTEUR, Roles::ADJOINT], true), 403);
+        abort_unless(in_array($user->role, [Roles::ADMIN, Roles::ADMIN_UNIV, Roles::CHEF, Roles::ADJOINT], true), 403);
         $departements = Departement::with('ufr')
             ->whereHas('ufr', fn ($q) => $user->isAdmin() ? $q : $q->where('universite_id', $user->universite_id))
             ->when($user->role === Roles::CHEF, fn ($q) => $q->where('id', $user->departement_id))
-            ->when(in_array($user->role, [Roles::DIRECTEUR, Roles::ADJOINT], true), fn ($q) => $q->where('ufr_id', $user->ufr_id))
+            ->when($user->role === Roles::ADJOINT, fn ($q) => $q->where('ufr_id', $user->ufr_id))
             ->orderBy('nom')->get();
         $filtre = $request->integer('departement_id') ?: $departements->first()?->id;
         $formations = Formation::where('departement_id', $filtre)->orderBy('ordre')->orderBy('id')->get();
         $structure = Formation::structureDepuis($formations);
-        $peutDresser = in_array($user->role, [Roles::ADMIN, Roles::PRESIDENT, Roles::CHEF], true) && (bool) $filtre;
+        $peutDresser = in_array($user->role, [Roles::ADMIN, Roles::ADMIN_UNIV, Roles::CHEF], true) && (bool) $filtre;
 
         return view('structures.formations', compact('departements', 'formations', 'filtre', 'structure', 'peutDresser'));
     }
@@ -216,7 +216,7 @@ class StructureController extends Controller
         ]);
         $dept = Departement::with('ufr')->findOrFail($data['departement_id']);
         $this->assertFormation($request, $dept);
-        abort_unless(in_array($data['semestre'], Formation::SEMESTRES[$data['niveau']], true), 422, 'Ce semestre ne correspond pas au niveau.');
+        abort_unless(in_array($data['semestre'], Formation::semestresDuRang(), true), 422, 'Ce semestre ne correspond pas au niveau.');
         Formation::create($data);
         return back()->with('ok', 'Formation ajoutée.');
     }
@@ -239,7 +239,7 @@ class StructureController extends Controller
 
     private function assert(Request $request, bool $write = false): void
     {
-        $roles = $write ? [Roles::ADMIN, Roles::PRESIDENT] : [Roles::ADMIN, Roles::PRESIDENT, Roles::DIP, Roles::DIRECTEUR, Roles::VICE];
+        $roles = [Roles::ADMIN, Roles::ADMIN_UNIV];
         abort_unless(in_array($request->user()->role, $roles, true), 403);
         if (! $request->user()->isAdmin()) {
             abort_unless($request->user()->universite_id, 403);
@@ -266,16 +266,20 @@ class StructureController extends Controller
         if ($user->role === Roles::CHEF) {
             abort_unless((int) $user->departement_id === (int) $dept->id, 403);
         }
-        abort_unless(in_array($user->role, [Roles::PRESIDENT, Roles::CHEF], true), 403);
+        abort_unless(in_array($user->role, [Roles::ADMIN_UNIV, Roles::CHEF], true), 403);
     }
 
     private function syncResponsables(Ufr $ufr): void
     {
-        if ($ufr->directeur_id) {
-            User::whereKey($ufr->directeur_id)->update(['role' => Roles::DIRECTEUR, 'ufr_id' => $ufr->id, 'universite_id' => $ufr->universite_id]);
-        }
         if ($ufr->directeur_adjoint_id) {
-            User::whereKey($ufr->directeur_adjoint_id)->update(['role' => Roles::ADJOINT, 'ufr_id' => $ufr->id, 'universite_id' => $ufr->universite_id]);
+            User::where('role', Roles::ADJOINT)->where('ufr_id', $ufr->id)->where('id', '!=', $ufr->directeur_adjoint_id)->update(['ufr_id' => null]);
+            Ufr::where('directeur_adjoint_id', $ufr->directeur_adjoint_id)->where('id', '!=', $ufr->id)->update(['directeur_adjoint_id' => null]);
+            User::whereKey($ufr->directeur_adjoint_id)->update([
+                'role' => Roles::ADJOINT,
+                'ufr_id' => $ufr->id,
+                'departement_id' => null,
+                'universite_id' => $ufr->universite_id,
+            ]);
         }
     }
 
@@ -320,6 +324,8 @@ class StructureController extends Controller
     {
         $dept->load('ufr');
         if ($dept->chef_id) {
+            User::where('role', Roles::CHEF)->where('departement_id', $dept->id)->where('id', '!=', $dept->chef_id)->update(['departement_id' => null]);
+            Departement::where('chef_id', $dept->chef_id)->where('id', '!=', $dept->id)->update(['chef_id' => null]);
             User::whereKey($dept->chef_id)->update([
                 'role' => Roles::CHEF,
                 'departement_id' => $dept->id,

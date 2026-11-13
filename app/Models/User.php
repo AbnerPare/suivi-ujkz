@@ -32,12 +32,27 @@ class User extends Authenticatable
 
     public function gereStructures(): bool
     {
-        return in_array($this->role, [Roles::ADMIN, Roles::PRESIDENT], true);
+        return in_array($this->role, [Roles::ADMIN, Roles::ADMIN_UNIV], true);
+    }
+
+    public function organiseSeances(): bool
+    {
+        return in_array($this->role, [Roles::ADMIN, Roles::ADMIN_UNIV, Roles::VICE], true);
     }
 
     public function voitBilans(): bool
     {
-        return $this->role !== Roles::SECRETAIRE;
+        return true;
+    }
+
+    public function recoitBilansOfficiels(): bool
+    {
+        return in_array($this->role, [Roles::DIP, Roles::VICE], true);
+    }
+
+    public function ouvreCampagnes(): bool
+    {
+        return in_array($this->role, [Roles::ADMIN, Roles::ADMIN_UNIV, Roles::VICE, Roles::DIP], true);
     }
 
     public function scopeDeUniversite($q, ?int $universiteId)

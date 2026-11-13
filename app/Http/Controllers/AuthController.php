@@ -2,13 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Universite;
-use App\Models\User;
 use App\Support\Notifier;
 use App\Support\Roles;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class AuthController extends Controller
 {
@@ -22,7 +20,7 @@ class AuthController extends Controller
         $credentials = $request->validate(['email' => 'required|email', 'password' => 'required']);
 
         if (Auth::attempt($credentials, $request->boolean('remember'))) {
-            if (! $request->user()->actif || ($request->user()->universite && ! $request->user()->universite->actif)) {
+            if (! $request->user()->actif || ! array_key_exists($request->user()->role, Roles::ALL) || ($request->user()->universite && ! $request->user()->universite->actif)) {
                 Auth::logout();
                 return back()->withErrors(['email' => 'Ce compte ou cette université est suspendu.'])->onlyInput('email');
             }
@@ -32,6 +30,30 @@ class AuthController extends Controller
         }
 
         return back()->withErrors(['email' => 'Email ou mot de passe incorrect.'])->onlyInput('email');
+    }
+
+    public function identifiant()
+    {
+        return view('compte.identifiant');
+    }
+
+    public function updateIdentifiant(Request $request)
+    {
+        $data = $request->validate([
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($request->user()->id)],
+            'password' => ['required', 'current_password'],
+        ], [
+            'email.unique' => 'Cette adresse est déjà utilisée.',
+            'password.current_password' => 'Le mot de passe actuel est incorrect.',
+        ]);
+        $ancien = $request->user()->email;
+        $email = mb_strtolower(trim($data['email']));
+        $request->user()->update(['email' => $email]);
+        if ($ancien !== $email) {
+            Notifier::journal($request->user(), 'Modification de l\'identifiant de connexion', $email, $ancien);
+        }
+
+        return back()->with('ok', 'Identifiant de connexion mis à jour. Utilisez cette adresse à la prochaine connexion.');
     }
 
     public function logout(Request $request)
@@ -49,35 +71,6 @@ class AuthController extends Controller
 
     public function register(Request $request)
     {
-        $data = $request->validate([
-            'universite' => 'required|string|max:180',
-            'sigle' => 'required|string|max:20',
-            'ville' => 'nullable|string|max:120',
-            'name' => 'required|string|max:120',
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8|confirmed',
-        ]);
-
-        $user = DB::transaction(function () use ($data) {
-            $universite = Universite::create([
-                'nom' => $data['universite'],
-                'sigle' => strtoupper($data['sigle']),
-                'ville' => $data['ville'] ?? null,
-                'email' => $data['email'],
-            ]);
-            return User::create([
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'password' => $data['password'],
-                'role' => Roles::PRESIDENT,
-                'universite_id' => $universite->id,
-            ]);
-        });
-
-        Auth::login($user);
-        $request->session()->regenerate();
-        Notifier::journal($user, 'Création d\'une université', $user->universite->sigle);
-
-        return redirect()->route('dashboard')->with('ok', 'Université créée. Vous êtes connecté en tant que président. Complétez les structures et les comptes.');
+        return redirect()->route('inscription')->withErrors(['email' => 'Seul l\'administrateur système crée une université et désigne son administrateur.']);
     }
 }

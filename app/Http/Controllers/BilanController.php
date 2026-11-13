@@ -25,17 +25,36 @@ class BilanController extends Controller
         abort_unless($request->user()->voitBilans(), 403);
         $user = $request->user();
         $bilans = Bilan::visibleTo($user)
-            ->with(['departement.ufr', 'periode', 'annee'])
+            ->with(['departement.ufr.universite', 'periode', 'annee'])
             ->when($request->filled('statut'), fn ($q) => $q->where('statut', $request->statut))
             ->when($request->filled('periode_id'), fn ($q) => $q->where('periode_id', $request->periode_id))
-            ->when($user->role === Roles::DIP && ! $request->filled('statut'), fn ($q) => $q->where('statut', 'officiel'))
-            ->latest('updated_at')
-            ->paginate(20)
-            ->withQueryString();
+            ->when($user->recoitBilansOfficiels() && ! $request->filled('statut'), fn ($q) => $q->where('statut', 'officiel'));
 
         $periodes = $this->periodesVisibles($user);
+        $groupes = null;
+        if ($user->recoitBilansOfficiels() || $user->isAdmin() || $user->role === Roles::ADMIN_UNIV) {
+            $groupes = $bilans->get()
+                ->sortBy(fn ($bilan) => ($bilan->departement->ufr->sigle ?: $bilan->departement->ufr->nom).'|'.$bilan->departement->nom.'|'.$bilan->periode->annee.'|'.$bilan->periode->mois)
+                ->groupBy(fn ($bilan) => $bilan->departement->ufr_id)
+                ->map(function ($lignes) use ($user) {
+                    $ufr = $lignes->first()->departement->ufr;
+                    $nom = trim(($ufr->sigle ? $ufr->sigle.' — ' : '').$ufr->nom);
+                    if ($user->isAdmin() && $ufr->universite) {
+                        $nom = $ufr->universite->sigle.' · '.$nom;
+                    }
 
-        return view('bilans.index', compact('bilans', 'periodes'));
+                    return [
+                        'id' => $ufr->id,
+                        'ufr' => $nom,
+                        'departements' => $lignes->pluck('departement_id')->unique()->count(),
+                        'bilans' => $lignes->values(),
+                    ];
+                })->values();
+        } else {
+            $bilans = $bilans->latest('updated_at')->paginate(20)->withQueryString();
+        }
+
+        return view('bilans.index', compact('bilans', 'periodes', 'groupes'));
     }
 
     public function create(Request $request)
@@ -186,6 +205,9 @@ class BilanController extends Controller
         if (in_array($bilan->statut, ['retour_correction', 'corrige'], true)) {
             $dip = User::where('role', Roles::DIP)->where('universite_id', $bilan->universite_id)->where('actif', true)->get();
             abort_if($dip->isEmpty(), 422, 'Aucun Directeur des Innovations Pédagogiques n\'est enregistré.');
+            $destinataires = $dip->concat(
+                User::where('role', Roles::VICE)->where('universite_id', $bilan->universite_id)->where('actif', true)->get()
+            );
             DB::transaction(function () use ($bilan, $user) {
                 BilanSnapshot::create([
                     'bilan_id' => $bilan->id,
@@ -198,9 +220,9 @@ class BilanController extends Controller
                 $bilan->update(['statut' => 'officiel', 'transmis_at' => now()]);
                 BilanHistorique::create(['bilan_id' => $bilan->id, 'user_id' => $user->id, 'de' => $de, 'vers' => 'officiel', 'commentaire' => 'Transmission officielle']);
             });
-            Notifier::send($dip, 'Bilan officiel transmis', $bilan->departement->nom.' · '.$bilan->periode->libelle, route('bilans.edit', $bilan));
+            Notifier::send($destinataires, 'Bilan officiel transmis', $bilan->departement->nom.' · '.$bilan->periode->libelle, route('bilans.edit', $bilan));
             Notifier::journal($user, 'Transmission officielle', 'Bilan #'.$bilan->id);
-            return redirect()->route('bilans.edit', $bilan)->with('ok', 'Bilan officiel transmis au Directeur des Innovations Pédagogiques.');
+            return redirect()->route('bilans.edit', $bilan)->with('ok', 'Bilan officiel transmis au Directeur des Innovations Pédagogiques et au vice-président.');
         }
 
         abort(422, 'Ce bilan ne peut pas être transmis dans son état actuel.');
@@ -213,37 +235,21 @@ class BilanController extends Controller
         abort_unless($bilan->examinablePar($user), 403);
         $data = $request->validate(['contenu' => 'nullable|string|max:5000']);
 
-        if ($bilan->statut === 'attente_adjoint') {
-            $directeur = User::where('role', Roles::DIRECTEUR)->where('ufr_id', $bilan->departement->ufr_id)->where('actif', true)->get();
-            abort_if($directeur->isEmpty(), 422, 'Aucun directeur d\'UFR n\'est affecté.');
-            DB::transaction(function () use ($bilan, $user, $data) {
-                if (filled($data['contenu'] ?? null)) {
-                    BilanObservation::create(['bilan_id' => $bilan->id, 'user_id' => $user->id, 'role' => $user->role, 'contenu' => $data['contenu']]);
-                }
-                $this->changerStatut($bilan, $user, 'attente_directeur', 'Validation du directeur adjoint');
-            });
-            Notifier::send($directeur, 'Bilan à valider', 'Le directeur adjoint a examiné le bilan '.$bilan->departement->nom.' ('.$bilan->periode->libelle.').', route('bilans.edit', $bilan));
-            if (filled($data['contenu'] ?? null)) {
-                Notifier::journal($user, 'Observation sur un bilan', 'Bilan #'.$bilan->id);
-            }
-            return back()->with('ok', 'Bilan transmis au directeur de l\'UFR.');
-        }
-
         $chef = User::where('role', Roles::CHEF)->where('departement_id', $bilan->departement_id)->where('actif', true)->get();
         DB::transaction(function () use ($bilan, $user, $data) {
             if (filled($data['contenu'] ?? null)) {
                 BilanObservation::create(['bilan_id' => $bilan->id, 'user_id' => $user->id, 'role' => $user->role, 'contenu' => $data['contenu']]);
             }
-            $this->changerStatut($bilan, $user, 'retour_correction', 'Retour au chef de département après examen des deux directeurs');
+            $this->changerStatut($bilan, $user, 'retour_correction', 'Validation du directeur adjoint et retour au chef de département');
         });
-        Notifier::send($chef, 'Bilan retourné avec les observations', 'Le bilan '.$bilan->periode->libelle.' vous est retourné après examen du directeur adjoint et du directeur de l\'UFR.', route('bilans.edit', $bilan));
+        Notifier::send($chef, 'Bilan retourné avec les observations', 'Le directeur adjoint a examiné le bilan '.$bilan->periode->libelle.'.', route('bilans.edit', $bilan));
         return back()->with('ok', 'Bilan retourné au chef de département.');
     }
 
     public function rouvrir(Request $request, Bilan $bilan)
     {
         $user = $request->user();
-        abort_unless(in_array($user->role, [Roles::DIP, Roles::PRESIDENT, Roles::ADMIN], true), 403);
+        abort_unless($user->recoitBilansOfficiels() || $user->isAdmin(), 403);
         abort_unless($bilan->statut === 'officiel', 422, 'Seul un bilan officiel peut être rouvert.');
         if (! $user->isAdmin()) {
             abort_unless((int) $user->universite_id === (int) $bilan->universite_id, 403);

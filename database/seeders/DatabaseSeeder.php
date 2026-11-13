@@ -32,9 +32,8 @@ class DatabaseSeeder extends Seeder
         };
 
         $compte('admin@ujkz.bf', ['name' => 'Administrateur système', 'role' => Roles::ADMIN, 'universite_id' => null, 'ufr_id' => null, 'departement_id' => null]);
-        $compte('president@ujkz.bf', ['name' => 'Président UJKZ', 'role' => Roles::PRESIDENT, 'universite_id' => $ujkz->id]);
+        $compte('admin.ujkz@ujkz.bf', ['name' => 'Administrateur UJKZ', 'role' => Roles::ADMIN_UNIV, 'universite_id' => $ujkz->id, 'ufr_id' => null, 'departement_id' => null]);
         $compte('vp@ujkz.bf', ['name' => 'Vice-président', 'role' => Roles::VICE, 'universite_id' => $ujkz->id]);
-        $compte('secretaire@ujkz.bf', ['name' => 'Secrétaire de séance', 'role' => Roles::SECRETAIRE, 'universite_id' => $ujkz->id]);
         $compte('dip@ujkz.bf', ['name' => 'Directeur des Innovations Pédagogiques', 'role' => Roles::DIP, 'universite_id' => $ujkz->id]);
 
         $sds = Ufr::firstOrCreate(['universite_id' => $ujkz->id, 'sigle' => 'SDS'], ['type' => 'ufr', 'nom' => 'Sciences de la Santé']);
@@ -43,13 +42,12 @@ class DatabaseSeeder extends Seeder
         $info = Departement::firstOrCreate(['ufr_id' => $sea->id, 'nom' => 'Informatique']);
         $maths = Departement::firstOrCreate(['ufr_id' => $sea->id, 'nom' => 'Mathématiques']);
 
-        $directeur = $compte('directeur@ujkz.bf', ['name' => 'Directeur UFR SEA', 'role' => Roles::DIRECTEUR, 'universite_id' => $ujkz->id, 'ufr_id' => $sea->id]);
         $adjoint = $compte('adjoint@ujkz.bf', ['name' => 'Directeur adjoint UFR SEA', 'role' => Roles::ADJOINT, 'universite_id' => $ujkz->id, 'ufr_id' => $sea->id]);
         $chef = $compte('chef@ujkz.bf', ['name' => 'Chef département Informatique', 'role' => Roles::CHEF, 'universite_id' => $ujkz->id, 'ufr_id' => $sea->id, 'departement_id' => $info->id]);
         $chefMaths = $compte('maths@ujkz.bf', ['name' => 'Chef département Mathématiques', 'role' => Roles::CHEF, 'universite_id' => $ujkz->id, 'ufr_id' => $sea->id, 'departement_id' => $maths->id]);
         unset($sds);
 
-        $sea->update(['directeur_id' => $directeur->id, 'directeur_adjoint_id' => $adjoint->id]);
+        $sea->update(['directeur_id' => null, 'directeur_adjoint_id' => $adjoint->id]);
         $info->update(['chef_id' => $chef->id]);
         $maths->update(['chef_id' => $chefMaths->id]);
 

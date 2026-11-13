@@ -5,23 +5,25 @@ namespace App\Support;
 class Roles
 {
     public const ADMIN = 'admin';
-    public const PRESIDENT = 'president';
+    public const ADMIN_UNIV = 'admin_universite';
     public const VICE = 'vice_president';
-    public const SECRETAIRE = 'secretaire';
     public const DIP = 'dip';
-    public const DIRECTEUR = 'directeur_ufr';
     public const ADJOINT = 'directeur_adjoint';
     public const CHEF = 'chef';
 
     public const ALL = [
         self::ADMIN => 'Administrateur système',
-        self::PRESIDENT => 'Président(e) de l\'université',
+        self::ADMIN_UNIV => 'Administrateur de l\'université',
         self::VICE => 'Vice-président(e)',
-        self::SECRETAIRE => 'Secrétaire de séance',
         self::DIP => 'Directeur des Innovations Pédagogiques',
-        self::DIRECTEUR => 'Directeur(trice) d\'UFR',
         self::ADJOINT => 'Directeur(trice) adjoint(e) d\'UFR',
         self::CHEF => 'Chef de département',
+    ];
+
+    public const HISTORIQUE = [
+        'president' => 'Président(e) de l\'université',
+        'secretaire' => 'Secrétaire de séance',
+        'directeur_ufr' => 'Directeur(trice) d\'UFR',
     ];
 
     public const STATUTS = [
@@ -35,7 +37,7 @@ class Roles
 
     public static function label(string $role): string
     {
-        return self::ALL[$role] ?? $role;
+        return self::ALL[$role] ?? self::HISTORIQUE[$role] ?? $role;
     }
 
     public static function statut(string $statut): string

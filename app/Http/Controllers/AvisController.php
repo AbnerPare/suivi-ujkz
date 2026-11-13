@@ -10,6 +10,13 @@ class AvisController extends Controller
     public function index(Request $request)
     {
         $avis = Avis::where('user_id', $request->user()->id)->latest()->paginate(30);
+        $vues = $avis->getCollection()->whereNull('lu_at')->pluck('id');
+        if ($vues->isNotEmpty()) {
+            app()->terminating(function () use ($vues) {
+                Avis::whereIn('id', $vues)->whereNull('lu_at')->update(['lu_at' => now()]);
+            });
+        }
+
         return view('avis.index', compact('avis'));
     }
 

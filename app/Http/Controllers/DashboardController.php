@@ -31,9 +31,11 @@ class DashboardController extends Controller
         $periode = $periodes->firstWhere('id', (int) $request->query('periode_id')) ?? $periodes->last();
 
         $base = Bilan::visibleTo($user)->when($annee, fn ($q) => $q->where('annee_academique_id', $annee->id));
-        $duMois = (clone $base)->when($periode, fn ($q) => $q->where('periode_id', $periode->id))->with('lignes', 'departement.ufr')->get();
+        $anneeBilans = (clone $base)->with('lignes', 'departement.ufr', 'periode')->get();
+        $duMois = $periode ? $anneeBilans->where('periode_id', $periode->id) : $anneeBilans;
         $officiels = $duMois->where('statut', 'officiel');
         $source = $officiels->isNotEmpty() ? $officiels : $duMois->where('statut', '!=', 'brouillon');
+        $recents = $this->derniersBilans($anneeBilans);
 
         $taux = function ($bilans, string $kind) {
             $lignes = $bilans->flatMap->lignes;
@@ -45,51 +47,119 @@ class DashboardController extends Controller
         $stats = [
             'bilans' => $duMois->count(),
             'officiels' => $officiels->count(),
-            'a_traiter' => $duMois->whereIn('statut', ['attente_adjoint', 'attente_directeur', 'retour_correction'])->count(),
+            'a_traiter' => $duMois->whereIn('statut', ['attente_adjoint', 'retour_correction'])->count(),
             'taux_cours' => $taux($source, 'cours'),
             'taux_eval' => $taux($source, 'eval'),
             'retards' => $source->filter(fn ($b) => ($b->tauxCours() ?? 100) < 50)->count(),
         ];
 
-        $parParcours = in_array($user->role, [Roles::CHEF, Roles::ADJOINT, Roles::DIRECTEUR], true);
-        if ($parParcours) {
-            $comparaison = $this->comparaisonParcours($source);
-            $comparaisonTitre = 'Comparaison des parcours';
-        } else {
-            $comparaison = $source->groupBy(fn ($b) => $b->departement->ufr->sigle ?: $b->departement->ufr->nom)
-                ->map(function ($group, $nom) use ($taux) {
-                    return ['nom' => $nom, 'cours' => $taux($group, 'cours'), 'eval' => $taux($group, 'eval')];
-                })->values();
-            $comparaisonTitre = 'Comparaison des UFR et instituts';
-        }
+        $departementChef = $user->role === Roles::CHEF ? $user->departement : null;
+        $cartesUfr = null;
+        $ufrOuverte = null;
+        if ($user->role === Roles::ADJOINT) {
+            $graphiques = $recents->sortBy(fn ($b) => mb_strtolower($b->departement->nom))
+                ->map(fn ($bilan) => $this->graphiqueDepartement($bilan, $taux))
+                ->values();
+        } elseif ($user->role === Roles::CHEF) {
+            $graphiques = collect([[
+                'titre' => trim(($departementChef?->nom ? 'Parcours du département '.$departementChef->nom : 'Comparaison des parcours').($recents->first()?->periode ? ' · '.$recents->first()->periode->libelle : '')),
+                'barres' => $this->comparaisonParcours($recents, true),
+            ]]);
+        } elseif ($user->recoitBilansOfficiels()) {
+            $cartesUfr = $recents->groupBy(fn ($b) => $b->departement->ufr_id)
+                ->map(function ($groupe) use ($taux) {
+                    $ufr = $groupe->first()->departement->ufr;
 
-        $parMois = $periodes->map(function ($p) use ($user, $annee) {
-            $bilans = Bilan::visibleTo($user)->where('annee_academique_id', $annee->id)->where('periode_id', $p->id)->where('statut', 'officiel')->with('lignes')->get();
-            $lignes = $bilans->flatMap->lignes;
-            $den = $lignes->sum('ec_total');
-            return ['mois' => $p->libelle, 'taux' => $den > 0 ? (int) round($lignes->sum('ec_effectues') / $den * 100) : 0];
-        });
+                    return [
+                        'id' => $ufr->id,
+                        'nom' => trim(($ufr->sigle ? $ufr->sigle.' — ' : '').$ufr->nom),
+                        'departements' => $groupe->count(),
+                        'taux_cours' => $taux($groupe, 'cours'),
+                        'taux_eval' => $taux($groupe, 'eval'),
+                    ];
+                })->sortBy('nom', SORT_NATURAL | SORT_FLAG_CASE)->values();
+            $ufrOuverte = $request->filled('ufr_id')
+                ? $cartesUfr->firstWhere('id', (int) $request->query('ufr_id'))
+                : null;
+            $graphiques = $ufrOuverte
+                ? $recents->filter(fn ($b) => (int) $b->departement->ufr_id === (int) $ufrOuverte['id'])
+                    ->sortBy(fn ($b) => mb_strtolower($b->departement->nom))
+                    ->map(fn ($bilan) => $this->graphiqueDepartement($bilan, $taux))
+                    ->values()
+                : collect();
+        } else {
+            $graphiques = collect([[
+                'titre' => 'Comparaison des UFR et instituts',
+                'barres' => $recents->groupBy(fn ($b) => $b->departement->ufr->sigle ?: $b->departement->ufr->nom)
+                    ->map(function ($group, $nom) use ($taux) {
+                        return ['nom' => $nom, 'cours' => $taux($group, 'cours'), 'eval' => $taux($group, 'eval')];
+                    })->values(),
+            ]]);
+        }
 
         $file = Bilan::visibleTo($user)
             ->when($user->role === Roles::ADJOINT, fn ($q) => $q->where('statut', 'attente_adjoint'))
-            ->when($user->role === Roles::DIRECTEUR, fn ($q) => $q->where('statut', 'attente_directeur'))
             ->when($user->role === Roles::CHEF, fn ($q) => $q->whereIn('statut', ['brouillon', 'retour_correction', 'corrige']))
-            ->when($user->role === Roles::DIP, fn ($q) => $q->where('statut', 'officiel'))
+            ->when($user->recoitBilansOfficiels(), fn ($q) => $q->where('statut', 'officiel'))
             ->with('departement', 'periode')->latest('updated_at')->take(6)->get();
 
         $mesures = Decision::query()
             ->when(! $user->isAdmin(), fn ($q) => $q->where('universite_id', $user->universite_id))
             ->where('type', 'urgence')->where('statut', '!=', 'executee')->latest()->take(4)->get();
 
+        $etablissement = null;
+        if ($user->universite_id && in_array($user->role, [Roles::VICE, Roles::DIP, Roles::ADMIN_UNIV], true)) {
+            $structures = Ufr::withCount('departements')->where('universite_id', $user->universite_id)->get();
+            $etablissement = [
+                'nom' => $user->universite->nom,
+                'sigle' => $user->universite->sigle,
+                'ufrs' => $structures->where('type', 'ufr')->count(),
+                'instituts' => $structures->where('type', 'institut')->count(),
+                'departements' => (int) $structures->sum('departements_count'),
+            ];
+        }
+
         $nonLus = Avis::where('user_id', $user->id)->whereNull('lu_at')->count();
         $prochaine = Reunion::query()
             ->when(! $user->isAdmin(), fn ($q) => $q->where('universite_id', $user->universite_id))
             ->where('statut', 'programmee')->where('date_seance', '>=', now())->orderBy('date_seance')->first();
 
-        return view('dashboard', compact('stats', 'comparaison', 'comparaisonTitre', 'parMois', 'file', 'mesures', 'annees', 'annee', 'periodes', 'periode', 'nonLus', 'prochaine', 'source'));
+        return view('dashboard', compact('stats', 'graphiques', 'cartesUfr', 'ufrOuverte', 'file', 'mesures', 'annees', 'annee', 'periodes', 'periode', 'nonLus', 'prochaine', 'source', 'departementChef', 'etablissement'));
     }
 
-    private function comparaisonParcours($bilans)
+    private function graphiqueDepartement(Bilan $bilan, callable $taux): array
+    {
+        $groupe = collect([$bilan]);
+
+        return [
+            'titre' => $bilan->departement->nom.' · '.$bilan->periode->libelle,
+            'stats' => [
+                'taux_cours' => $taux($groupe, 'cours'),
+                'taux_eval' => $taux($groupe, 'eval'),
+                'officiels' => $bilan->statut === 'officiel' ? 1 : 0,
+                'bilans' => 1,
+                'retards' => ($bilan->tauxCours() ?? 100) < 50 ? 1 : 0,
+            ],
+            'barres' => $this->comparaisonParcours($groupe, false),
+        ];
+    }
+
+    private function derniersBilans($bilans)
+    {
+        return $bilans->groupBy('departement_id')->map(function ($groupe) {
+            $transmis = $groupe->filter(fn (Bilan $bilan) => $bilan->statut !== 'brouillon');
+            $pool = $transmis->isNotEmpty() ? $transmis : $groupe;
+
+            return $pool->sortBy(fn (Bilan $bilan) => sprintf(
+                '%04d%02d%010d',
+                $bilan->periode->annee ?? 0,
+                $bilan->periode->mois ?? 0,
+                $bilan->id
+            ))->last();
+        })->filter()->values();
+    }
+
+    private function comparaisonParcours($bilans, bool $nommerDepartement = false)
     {
         $lignes = $bilans->flatMap(function (Bilan $bilan) {
             return $bilan->lignes->map(function (BilanLigne $ligne) use ($bilan) {
@@ -128,7 +198,7 @@ class DashboardController extends Controller
             ->sortBy([['departement', 'asc'], ['ordre', 'asc']])
             ->values();
 
-        $plusieursDepartements = $groupes->pluck('departement')->unique()->count() > 1;
+        $plusieursDepartements = $nommerDepartement || $groupes->pluck('departement')->unique()->count() > 1;
         $doublons = $groupes->groupBy(fn (array $ligne) => $ligne['departement'].'|'.$ligne['parcours'])
             ->filter(fn ($rows) => $rows->count() > 1);
 
@@ -148,5 +218,23 @@ class DashboardController extends Controller
                 'eval' => $ligne['eval'],
             ];
         })->values();
+    }
+
+    private function comparaisonDepartements($bilans)
+    {
+        return $bilans->map(function (Bilan $bilan) {
+            $ufr = $bilan->departement->ufr->sigle ?: $bilan->departement->ufr->nom;
+
+            return [
+                'ordre' => $ufr.'|'.$bilan->departement->nom,
+                'nom' => $ufr.' · '.$bilan->departement->nom,
+                'cours' => $bilan->tauxCours() ?? 0,
+                'eval' => $bilan->tauxEval() ?? 0,
+            ];
+        })->sortBy('ordre')->values()->map(fn (array $ligne) => [
+            'nom' => $ligne['nom'],
+            'cours' => $ligne['cours'],
+            'eval' => $ligne['eval'],
+        ])->values();
     }
 }

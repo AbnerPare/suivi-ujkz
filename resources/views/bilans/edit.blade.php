@@ -35,7 +35,7 @@
                             @if($li === 0)
                                 <td rowspan="{{ count($parcours['lignes']) }}" class="border border-slate-300 px-2 py-2 text-center align-middle">{{ $parcours['nom'] }}</td>
                             @endif
-                            <td class="border border-slate-300 px-2 py-2 text-center">{{ $l->semestre }}</td>
+                            <td class="border border-slate-300 px-2 py-2 text-center">S{{ $li + 1 }}</td>
                             @foreach(['ec_total','ec_effectues'] as $f)
                                 <td class="border border-slate-300 px-2 py-2 text-center"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ old('lignes.'.$l->id.'.'.$f, $l->$f) }}" title="{{ $errors->first('lignes.'.$l->id.'.'.$f) }}" class="w-20 rounded border px-2 py-1 text-center @if($errors->has('lignes.'.$l->id.'.'.$f)) border-red-600 bg-red-50 text-red-700 underline decoration-red-600 decoration-2 @endif" @disabled($ro)></td>
                             @endforeach
@@ -90,15 +90,13 @@
 <form method="POST" action="{{ route('bilans.examiner', $bilan) }}" class="mt-6 rounded-lg border bg-white p-5">
     @csrf
     <h2 class="font-semibold">Examen — {{ $user->roleLabel() }}</h2>
-    <p class="mt-1 text-sm text-slate-600">La validation envoie le bilan à l'étape suivante. Le retour au chef de département n'a lieu qu'après le passage chez les deux directeurs.</p>
+    <p class="mt-1 text-sm text-slate-600">La validation renvoie le bilan au chef de département avec vos observations.</p>
     <textarea name="contenu" rows="3" placeholder="Observations et recommandations" class="mt-3 w-full rounded border px-3 py-2"></textarea>
-    <button class="mt-3 rounded bg-ujkz px-4 py-2 font-semibold text-white">
-        {{ $bilan->statut === 'attente_adjoint' ? 'Valider et transmettre au directeur' : 'Valider et retourner au chef de département' }}
-    </button>
+    <button class="mt-3 rounded bg-ujkz px-4 py-2 font-semibold text-white">Valider et retourner au chef de département</button>
 </form>
 @endif
 
-@if($bilan->statut === 'officiel' && in_array($user->role, ['dip','president','admin']))
+@if($bilan->statut === 'officiel' && ($user->recoitBilansOfficiels() || $user->isAdmin()))
 <form method="POST" action="{{ route('bilans.rouvrir', $bilan) }}" class="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-5">
     @csrf
     <h2 class="font-semibold">Rouvrir le bilan officiel</h2>
@@ -107,8 +105,8 @@
 </form>
 @endif
 
-<section class="mt-8 grid gap-6 {{ $user->role === 'dip' ? '' : 'lg:grid-cols-2' }}">
-    @if($user->role !== 'dip')
+<section class="mt-8 grid gap-6 {{ $user->recoitBilansOfficiels() ? '' : 'lg:grid-cols-2' }}">
+    @if(! $user->recoitBilansOfficiels())
     <div class="rounded-lg border bg-white p-5">
         <h2 class="font-semibold">Observations</h2>
         @forelse($bilan->observations as $o)
@@ -118,7 +116,7 @@
                 <p class="mt-1">{{ $o->contenu }}</p>
             </article>
         @empty
-            <p class="mt-2 text-sm text-slate-500">Aucune observation des directeurs.</p>
+            <p class="mt-2 text-sm text-slate-500">Aucune observation.</p>
         @endforelse
     </div>
     @endif

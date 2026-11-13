@@ -42,13 +42,9 @@ class Bilan extends Model
     public function examinablePar(User $user): bool
     {
         $ufrId = $this->departement?->ufr_id;
-        if ($this->statut === 'attente_adjoint' && $user->role === Roles::ADJOINT && (int) $user->ufr_id === (int) $ufrId) {
-            return true;
-        }
-        if ($this->statut === 'attente_directeur' && $user->role === Roles::DIRECTEUR && (int) $user->ufr_id === (int) $ufrId) {
-            return true;
-        }
-        return false;
+        return $this->statut === 'attente_adjoint'
+            && $user->role === Roles::ADJOINT
+            && (int) $user->ufr_id === (int) $ufrId;
     }
 
     public function scopeVisibleTo($q, User $user)
@@ -60,7 +56,7 @@ class Bilan extends Model
         if ($user->role === Roles::CHEF) {
             $q->where('departement_id', $user->departement_id);
         }
-        if (in_array($user->role, [Roles::DIRECTEUR, Roles::ADJOINT], true)) {
+        if ($user->role === Roles::ADJOINT) {
             $q->whereHas('departement', fn ($d) => $d->where('ufr_id', $user->ufr_id));
         }
         return $q;

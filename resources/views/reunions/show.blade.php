@@ -1,7 +1,9 @@
 @extends('layouts.app')
 @section('title', $reunion->titre)
 @section('content')
-@php($user = auth()->user())
+@php
+    $user = auth()->user();
+@endphp
 <h1 class="text-2xl font-bold text-ujkz">{{ $reunion->titre }}</h1>
 <p class="text-slate-600">{{ $reunion->date_seance->format('d/m/Y H:i') }} @if($reunion->lieu)· {{ $reunion->lieu }}@endif · {{ $reunion->statut }}</p>
 @if($reunion->ordre_du_jour)
@@ -18,7 +20,7 @@
         <ul class="space-y-1 text-sm">
             @foreach($reunion->participants as $p)
                 <li class="flex items-center gap-2">
-                    @if(in_array($user->role, ['secretaire','president','admin']))
+                    @if($user->organiseSeances())
                         <input type="checkbox" name="presents[]" value="{{ $p->id }}" @checked($p->pivot->present)>
                     @else
                         <span>{{ $p->pivot->present ? 'Présent' : 'Absent' }}</span>
@@ -28,7 +30,7 @@
                 </li>
             @endforeach
         </ul>
-        @if(in_array($user->role, ['secretaire','president','admin']))
+        @if($user->organiseSeances())
             <button class="mt-3 rounded bg-slate-800 px-3 py-1.5 text-white">Enregistrer la feuille de présence</button>
         @endif
     </form>
@@ -36,8 +38,8 @@
 
 <section class="mt-6 rounded-lg border bg-white p-4">
     <h2 class="font-semibold">Procès-verbal</h2>
-    @if($reunion->pv_publie || in_array($user->role, ['secretaire','admin','president']))
-        @if(in_array($user->role, ['secretaire','admin']))
+    @if($reunion->pv_publie || $user->organiseSeances())
+        @if($user->organiseSeances())
         <form method="POST" action="{{ route('reunions.pv', $reunion) }}" class="mt-3 space-y-2">
             @csrf
             <textarea name="pv" rows="8" class="w-full rounded border px-3 py-2">{{ $reunion->pv }}</textarea>

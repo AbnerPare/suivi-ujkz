@@ -14,6 +14,7 @@ use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::redirect('/', '/dashboard');
+Route::get('/universites/{universite}/logo', [UniversiteController::class, 'logo'])->name('universites.logo');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
@@ -24,6 +25,8 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+    Route::get('/identifiant', [AuthController::class, 'identifiant'])->name('compte.edit');
+    Route::put('/identifiant', [AuthController::class, 'updateIdentifiant'])->name('compte.update');
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
     Route::get('/bilans', [BilanController::class, 'index'])->name('bilans.index');

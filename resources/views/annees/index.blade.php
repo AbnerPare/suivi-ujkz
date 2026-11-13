@@ -2,6 +2,7 @@
 @section('title', 'Années et campagnes')
 @section('content')
 <h1 class="text-2xl font-bold text-ujkz">Années académiques et campagnes</h1>
+<p class="mt-1 text-slate-600">Le vice-président et le Directeur des Innovations Pédagogiques ouvrent l'année, la campagne et le mois de suivi. Le chef de département peut ensuite créer son bilan.</p>
 @if($editable)
 <form method="POST" action="{{ route('annees.store') }}" class="mt-4 flex flex-wrap gap-2 rounded-lg border bg-white p-4">
     @csrf

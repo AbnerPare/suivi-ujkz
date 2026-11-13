@@ -19,13 +19,13 @@ class ReunionController extends Controller
             ->orderByDesc('date_seance')
             ->paginate(20);
         $users = User::query()->when(! $user->isAdmin(), fn ($q) => $q->where('universite_id', $user->universite_id))->where('actif', true)->orderBy('name')->get();
-        $peutCreer = in_array($user->role, [Roles::SECRETAIRE, Roles::PRESIDENT, Roles::ADMIN], true);
+        $peutCreer = $user->organiseSeances();
         return view('reunions.index', compact('reunions', 'users', 'peutCreer'));
     }
 
     public function store(Request $request)
     {
-        abort_unless(in_array($request->user()->role, [Roles::SECRETAIRE, Roles::PRESIDENT, Roles::ADMIN], true), 403);
+        abort_unless($request->user()->organiseSeances(), 403);
         $data = $request->validate([
             'titre' => 'required|string|max:180',
             'date_seance' => 'required|date',
@@ -66,7 +66,7 @@ class ReunionController extends Controller
 
     public function presence(Request $request, Reunion $reunion)
     {
-        abort_unless(in_array($request->user()->role, [Roles::SECRETAIRE, Roles::PRESIDENT, Roles::ADMIN], true), 403);
+        abort_unless($request->user()->organiseSeances(), 403);
         $this->voir($request, $reunion);
         $data = $request->validate(['presents' => 'array', 'presents.*' => 'exists:users,id']);
         foreach ($reunion->participants as $p) {
@@ -82,7 +82,7 @@ class ReunionController extends Controller
 
     public function pv(Request $request, Reunion $reunion)
     {
-        abort_unless(in_array($request->user()->role, [Roles::SECRETAIRE, Roles::ADMIN], true), 403);
+        abort_unless($request->user()->organiseSeances(), 403);
         $this->voir($request, $reunion);
         $data = $request->validate(['pv' => 'required|string|max:20000', 'publier' => 'nullable|boolean']);
         $reunion->update(['pv' => $data['pv'], 'pv_publie' => $request->boolean('publier'), 'statut' => 'tenue']);

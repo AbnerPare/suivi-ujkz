@@ -21,11 +21,9 @@ class Formation extends Model
 
     public function departement(): BelongsTo { return $this->belongsTo(Departement::class); }
 
-    public static function semestresDuRang(int $rang): array
+    public static function semestresDuRang(int $rang = 1): array
     {
-        $debut = ($rang - 1) * 2 + 1;
-
-        return ['S'.$debut, 'S'.($debut + 1)];
+        return ['S1', 'S2'];
     }
 
     public static function libelleParDefaut(int $rang): string
