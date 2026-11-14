@@ -183,7 +183,7 @@ class StructureController extends Controller
             $creees = [];
             foreach ($data['filieres'] as $filiere) {
                 foreach (array_values($filiere['niveaux']) as $rang => $label) {
-                    foreach (Formation::semestresDuRang($rang + 1) as $semestre) {
+                    foreach (Formation::semestresDuLibelle($label, $rang + 1) as $semestre) {
                         $creees[] = Formation::create([
                             'departement_id' => $dept->id,
                             'filiere' => $filiere['nom'],
@@ -216,7 +216,7 @@ class StructureController extends Controller
         ]);
         $dept = Departement::with('ufr')->findOrFail($data['departement_id']);
         $this->assertFormation($request, $dept);
-        abort_unless(in_array($data['semestre'], Formation::semestresDuRang(), true), 422, 'Ce semestre ne correspond pas au niveau.');
+        abort_unless(in_array($data['semestre'], Formation::semestresDuLibelle($data['niveau']), true), 422, 'Ce semestre ne correspond pas au niveau.');
         Formation::create($data);
         return back()->with('ok', 'Formation ajoutée.');
     }

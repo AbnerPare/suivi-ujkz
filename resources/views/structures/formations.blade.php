@@ -4,7 +4,7 @@
 <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
     <div>
         <h1 class="text-2xl font-bold text-ujkz">Tableau de bilan</h1>
-        <p class="mt-1 max-w-3xl text-slate-600">Le chef de département dresse d'abord la grille. Pour chaque filière, il indique les libellés dans l'ordre voulu. Cet ordre n'est pas numéroté. Chaque libellé occupe la colonne Parcours, avec S1 et S2 dans la colonne Niveau. Le suivi des EC se remplit ensuite, période par période.</p>
+        <p class="mt-1 max-w-3xl text-slate-600">Le chef de département dresse d'abord la grille. Pour chaque filière, il indique les libellés. L1 correspond à S1 et S2, L2 à S3 et S4, L3 à S5 et S6, M1 à S1 et S2, M2 à S3 et S4. Le suivi des EC se remplit ensuite, période par période.</p>
     </div>
     @if($departements->count() > 1)
         <form method="GET">
@@ -45,8 +45,14 @@
         const depart = document.getElementById('filieres');
         const apercu = document.getElementById('apercu');
 
-        function semestres() {
-            return ['S1', 'S2'];
+        const semestresParLibelle = @json(\App\Models\Formation::SEMESTRES);
+
+        function semestres(label, index) {
+            if (semestresParLibelle[label]) {
+                return semestresParLibelle[label];
+            }
+            const debut = index * 2 + 1;
+            return ['S' + debut, 'S' + (debut + 1)];
         }
 
         function blocVide() {
@@ -107,18 +113,20 @@
                 const liste = document.createElement('div');
                 liste.className = 'mt-4 space-y-2';
                 filiere.niveaux.forEach((label, j) => {
-                    const [s1, s2] = semestres();
+                    const [s1, s2] = semestres(label, j);
                     const row = document.createElement('div');
                     row.className = 'grid items-center gap-3 sm:grid-cols-[1fr_auto]';
                     row.innerHTML = `
                         <label class="block text-sm">Libellé de la colonne Parcours
                             <input name="filieres[${i}][niveaux][${j}]" value="" required maxlength="80" class="mt-1 w-full rounded border px-3 py-2">
                         </label>
-                        <span class="text-sm text-slate-600">Colonne Niveau : <strong>${s1}</strong> et <strong>${s2}</strong></span>`;
+                        <span class="semestres text-sm text-slate-600">Colonne Niveau : <strong>${s1}</strong> et <strong>${s2}</strong></span>`;
                     const input = row.querySelector('input');
                     input.value = label;
                     input.addEventListener('input', () => {
                         filiere.niveaux[j] = input.value;
+                        const [a, b] = semestres(input.value, j);
+                        row.querySelector('.semestres').innerHTML = `Colonne Niveau : <strong>${a}</strong> et <strong>${b}</strong>`;
                         apercuTableau();
                     });
                     liste.appendChild(row);
@@ -134,7 +142,7 @@
             filieres.forEach((filiere) => {
                 const lignes = [];
                 filiere.niveaux.forEach((label, j) => {
-                    semestres().forEach((semestre) => lignes.push({ label: label || '—', semestre }));
+                    semestres(label, j).forEach((semestre) => lignes.push({ label: label || '—', semestre }));
                 });
                 const groupes = [];
                 lignes.forEach((ligne) => {
@@ -199,7 +207,10 @@
                     $cursor = 0;
                 @endphp
                 @foreach($filiere['niveaux'] as $index => $label)
-                    @foreach(\App\Models\Formation::semestresDuRang($index + 1) as $si => $semestre)
+                    @php
+                        $semestresNiveau = \App\Models\Formation::semestresDuLibelle($label, $index + 1);
+                    @endphp
+                    @foreach($semestresNiveau as $si => $semestre)
                         <tr>
                             @if($cursor === 0)
                                 <td rowspan="{{ $total }}" class="border border-slate-300 px-2 py-2 align-middle font-medium">{{ $filiere['nom'] }}</td>

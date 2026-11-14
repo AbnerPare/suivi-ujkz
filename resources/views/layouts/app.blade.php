@@ -43,7 +43,7 @@
             ['decisions.index', 'Décisions', true],
             ['users.index', 'Utilisateurs', $u->gereStructures()],
             ['universites.index', 'Universités', $u->isAdmin()],
-            ['journal.index', 'Journal', $u->isAdmin()],
+            ['audit.index', 'Audit', $u->isAdmin()],
         ];
     @endphp
     <input id="menu-ouvert" type="checkbox" class="peer sr-only">
@@ -64,14 +64,21 @@
             @endforeach
             <a id="menu-notifications" href="{{ route('avis.index') }}" class="rounded px-3 py-2 hover:bg-white/10 {{ request()->routeIs('avis.*') ? 'bg-white/15 font-semibold' : '' }} {{ $nonLus ? 'underline decoration-2 underline-offset-4' : '' }}">Notifications @if($nonLus)<span id="menu-notifications-badge" class="ml-1 rounded-full bg-white px-1.5 text-xs font-bold text-ujkz no-underline">{{ $nonLus }}</span>@endif</a>
         </nav>
-        <div class="border-t border-white/10 px-4 py-4 text-sm">
-            <p class="truncate font-medium">{{ $u->name }}</p>
-            <p class="mt-0.5 truncate text-white/75">{{ $u->roleLabel() }}@if($u->universite) · {{ $u->universite->sigle }}@endif</p>
-            <a href="{{ route('compte.edit') }}" class="mt-3 block rounded px-3 py-1.5 hover:bg-white/10 {{ request()->routeIs('compte.*') ? 'bg-white/15 font-semibold' : '' }}">Identifiant</a>
-            <form method="POST" action="{{ route('logout') }}" class="mt-3">
-                @csrf
-                <button class="w-full rounded border border-white/40 px-3 py-1.5 hover:bg-white/10">Se déconnecter</button>
-            </form>
+        <div class="border-t border-white/10 p-3">
+            <div class="rounded-xl bg-white/10 p-3">
+                <div class="flex items-center gap-3">
+                    <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-sm font-bold text-ujkz">{{ $u->initiales() }}</span>
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-semibold">{{ $u->name }}</p>
+                        <p class="truncate text-xs text-white/70">{{ $u->roleLabel() }}@if($u->universite) · {{ $u->universite->sigle }}@endif</p>
+                    </div>
+                </div>
+                <a href="{{ route('compte.edit') }}" class="mt-3 block rounded-lg bg-white px-3 py-2 text-center text-sm font-semibold text-ujkz hover:bg-ujkz-light {{ request()->routeIs('compte.*') ? 'ring-2 ring-white' : '' }}">Profil</a>
+                <form method="POST" action="{{ route('logout') }}" class="mt-2">
+                    @csrf
+                    <button class="w-full rounded-lg border border-white/25 px-3 py-2 text-sm text-white/90 hover:bg-white/10">Se déconnecter</button>
+                </form>
+            </div>
         </div>
     </aside>
 @endauth

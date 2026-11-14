@@ -17,10 +17,17 @@ class UserController extends Controller
     public function index(Request $request)
     {
         abort_unless($request->user()->gereStructures(), 403);
+        $type = $request->query('type');
+        if (! is_string($type) || ! array_key_exists($type, Roles::ALL)) {
+            $type = '';
+        }
         $users = User::with(['universite', 'ufr', 'departement'])
             ->whereIn('role', array_keys(Roles::ALL))
+            ->when($type !== '', fn ($q) => $q->where('role', $type))
             ->when(! $request->user()->isAdmin(), fn ($q) => $q->where('universite_id', $request->user()->universite_id))
-            ->orderBy('name')->paginate(30);
+            ->orderBy('name')
+            ->paginate(30)
+            ->withQueryString();
         $universites = $request->user()->isAdmin() ? Universite::orderBy('nom')->get() : collect([$request->user()->universite]);
         $ufrs = Ufr::query()->when(! $request->user()->isAdmin(), fn ($q) => $q->where('universite_id', $request->user()->universite_id))->orderBy('nom')->get();
         $departements = Departement::with('ufr')->whereHas('ufr', function ($q) use ($request) {
@@ -29,7 +36,7 @@ class UserController extends Controller
             }
         })->orderBy('nom')->get();
         $roles = $this->rolesAutorises($request->user());
-        return view('users.index', compact('users', 'universites', 'ufrs', 'departements', 'roles'));
+        return view('users.index', compact('users', 'universites', 'ufrs', 'departements', 'roles', 'type'));
     }
 
     public function store(Request $request)

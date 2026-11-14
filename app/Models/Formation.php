@@ -23,7 +23,14 @@ class Formation extends Model
 
     public static function semestresDuRang(int $rang = 1): array
     {
-        return ['S1', 'S2'];
+        $debut = max(1, ($rang - 1) * 2 + 1);
+
+        return ['S'.$debut, 'S'.($debut + 1)];
+    }
+
+    public static function semestresDuLibelle(string $libelle, int $rang = 1): array
+    {
+        return self::SEMESTRES[$libelle] ?? self::semestresDuRang($rang);
     }
 
     public static function libelleParDefaut(int $rang): string

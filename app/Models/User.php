@@ -30,6 +30,17 @@ class User extends Authenticatable
     public function isAdmin(): bool { return $this->role === Roles::ADMIN; }
     public function roleLabel(): string { return Roles::label($this->role); }
 
+    public function initiales(): string
+    {
+        $mots = preg_split('/\s+/u', trim($this->name)) ?: [];
+        $lettres = '';
+        foreach (array_slice($mots, 0, 2) as $mot) {
+            $lettres .= mb_strtoupper(mb_substr($mot, 0, 1));
+        }
+
+        return $lettres !== '' ? $lettres : 'U';
+    }
+
     public function gereStructures(): bool
     {
         return in_array($this->role, [Roles::ADMIN, Roles::ADMIN_UNIV], true);

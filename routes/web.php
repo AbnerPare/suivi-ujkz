@@ -84,5 +84,6 @@ Route::middleware('auth')->group(function () {
     Route::post('/universites', [UniversiteController::class, 'store'])->name('universites.store');
     Route::put('/universites/{universite}', [UniversiteController::class, 'update'])->name('universites.update');
 
-    Route::get('/journal', [JournalController::class, 'index'])->name('journal.index');
+    Route::get('/audit', [JournalController::class, 'index'])->name('audit.index');
+    Route::redirect('/journal', '/audit');
 });

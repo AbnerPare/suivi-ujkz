@@ -29,6 +29,13 @@
                 <option value="{{ $p->id }}" @selected(optional($periode)->id === $p->id)>{{ $p->libelle }}</option>
             @endforeach
         </select>
+        @if(in_array(auth()->user()->role, ['admin', 'admin_universite', 'dip', 'vice_president']))
+            <select name="structure" class="rounded border px-3 py-2" onchange="this.form.submit()" aria-label="Trier par structure">
+                <option value="" @selected($structure === '')>UFR et instituts</option>
+                <option value="ufr" @selected($structure === 'ufr')>UFR</option>
+                <option value="institut" @selected($structure === 'institut')>Instituts</option>
+            </select>
+        @endif
     </form>
 </div>
 
@@ -65,32 +72,53 @@
     <div class="mt-8 grid gap-4 sm:grid-cols-2">
         @forelse($cartesUfr as $carte)
             <a href="{{ route('dashboard', array_merge(request()->query(), ['ufr_id' => $carte['id']])) }}" class="rounded-lg border border-slate-200 bg-white p-5 hover:border-ujkz">
-                <h2 class="text-lg font-semibold text-ujkz">{{ $carte['nom'] }}</h2>
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-400">{{ $carte['type'] === 'institut' ? 'Institut' : 'UFR' }}</p>
+                <h2 class="mt-1 text-lg font-semibold text-ujkz">{{ $carte['nom'] }}</h2>
                 <p class="mt-1 text-sm text-slate-500">{{ $carte['departements'] }} département(s)</p>
                 <p class="mt-3 text-sm">Cours <span class="text-2xl font-bold text-ujkz">{{ $carte['taux_cours'] }} %</span> <span class="text-slate-400">·</span> Évaluations <span class="text-2xl font-bold text-ujkz">{{ $carte['taux_eval'] }} %</span></p>
             </a>
         @empty
-            <p class="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-500 sm:col-span-2">Aucun bilan transmis.</p>
+            <p class="rounded-lg border border-slate-200 bg-white px-4 py-8 text-center text-slate-500 sm:col-span-2">{{ $structure === 'ufr' ? 'Aucune UFR pour cette période.' : ($structure === 'institut' ? 'Aucun institut pour cette période.' : 'Aucun bilan transmis.') }}</p>
         @endforelse
     </div>
 @else
 @if($ufrOuverte)
-    <a href="{{ route('dashboard', request()->except('ufr_id')) }}" class="mt-8 inline-block text-sm font-semibold text-ujkz underline">Toutes les UFR</a>
+    <a href="{{ route('dashboard', request()->except('ufr_id')) }}" class="mt-8 inline-block text-sm font-semibold text-ujkz underline">Toutes les structures</a>
     <h2 class="mt-2 text-xl font-bold text-ujkz">{{ $ufrOuverte['nom'] }}</h2>
 @endif
 @if($graphiques->isNotEmpty())
     <p class="mt-4 text-sm text-slate-600">Chaque graphique correspond au dernier bilan transmis du département.</p>
 @endif
 @forelse($graphiques as $i => $graphique)
-<section class="mt-8">
-    <h2 class="mb-3 text-lg font-semibold text-ujkz">{{ $graphique['titre'] }}</h2>
+<section class="mt-8 overflow-hidden rounded-lg border-2 border-slate-400 bg-white">
+    <h2 class="border-b border-slate-300 px-5 py-4 text-lg font-semibold text-ujkz">{{ $graphique['titre'] }}</h2>
     @if(! empty($graphique['stats']))
-        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="grid gap-4 border-b border-slate-300 p-5 sm:grid-cols-2 lg:grid-cols-4">
             @include('dashboard._indicateurs', ['stats' => $graphique['stats']])
         </div>
     @endif
-    <div class="mt-4 rounded-lg border border-slate-200 bg-white p-5">
-        <canvas id="chart-{{ $i }}" height="110"></canvas>
+    <div class="overflow-x-auto">
+        <div class="min-w-[1080px]">
+            <div class="px-5 pt-5">
+                <canvas id="chart-{{ $i }}" height="150"></canvas>
+            </div>
+            @php
+                $couleursDelib = ['oui' => '#16A34A', 's-an' => '#F97316', 'non' => '#DC2626'];
+                $aDeliberations = collect($graphique['barres'])->contains(fn ($barre) => ! empty($barre['deliberations']));
+            @endphp
+            @if($aDeliberations)
+            <div id="delib-{{ $i }}" class="relative mx-5 mb-5 grid gap-1" style="grid-template-columns: repeat({{ count($graphique['barres']) }}, minmax(72px, 1fr));">
+                @foreach($graphique['barres'] as $barre)
+                    <div class="carte-delib overflow-hidden rounded-md border border-slate-300 bg-white text-center shadow-sm">
+                        <p class="border-b border-slate-200 bg-slate-50 px-0.5 py-0.5 text-[9px] font-semibold leading-3 text-ujkz">Délibération</p>
+                        @foreach($barre['deliberations'] ?? [] as $ligne)
+                            <p class="whitespace-nowrap px-1 py-0.5 text-[11px] font-semibold leading-4 text-white" style="background: {{ $couleursDelib[$ligne['statut']] ?? '#DC2626' }}">{{ $ligne['semestre'] }} = {{ $ligne['statut'] }}</p>
+                        @endforeach
+                    </div>
+                @endforeach
+            </div>
+            @endif
+        </div>
     </div>
 </section>
 @empty
@@ -128,24 +156,58 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
 <script>
 const graphiques = @json($graphiques);
+function placerDeliberations(chart, graphique, i) {
+    const zone = document.getElementById('delib-' + i);
+    if (!zone || !chart || !chart.scales || !chart.scales.x) return;
+    const cartes = zone.querySelectorAll('.carte-delib');
+    if (!cartes.length) return;
+    const ecart = graphique.barres.length > 1
+        ? Math.abs(chart.scales.x.getPixelForTick(1) - chart.scales.x.getPixelForTick(0))
+        : 96;
+    zone.style.height = '4.25rem';
+    cartes.forEach(function (carte, index) {
+        carte.style.position = 'absolute';
+        carte.style.top = '0';
+        carte.style.transform = 'translateX(-50%)';
+        carte.style.width = Math.max(84, Math.min(110, ecart - 6)) + 'px';
+        carte.style.left = chart.scales.x.getPixelForTick(index) + 'px';
+    });
+}
+
 graphiques.forEach(function (graphique, i) {
-    new Chart(document.getElementById('chart-' + i), {
+    let chart;
+    chart = new Chart(document.getElementById('chart-' + i), {
         type: 'bar',
         data: {
             labels: graphique.barres.map(x => x.nom),
             datasets: [
-                { label: 'Cours (%)', data: graphique.barres.map(x => x.cours), backgroundColor: '#1E3A5F' },
-                { label: 'Évaluations (%)', data: graphique.barres.map(x => x.eval), backgroundColor: '#7C93A8' },
+                { label: 'Cours (%)', data: graphique.barres.map(x => x.cours), backgroundColor: '#1E3A5F', borderColor: '#152A45', borderWidth: 1, borderSkipped: false },
+                { label: 'Évaluations (%)', data: graphique.barres.map(x => x.eval), backgroundColor: '#7C93A8', borderColor: '#4E6478', borderWidth: 1, borderSkipped: false },
             ]
         },
         options: {
             responsive: true,
+            layout: { padding: 4 },
+            animation: { onComplete: function () { placerDeliberations(chart, graphique, i); } },
+            onResize: function () { placerDeliberations(chart, graphique, i); },
+            datasets: { bar: { categoryPercentage: 0.72, barPercentage: 0.9 } },
             scales: {
-                y: { min: 0, max: 100 },
-                x: { ticks: { autoSkip: false, maxRotation: 40, minRotation: 0 } }
+                y: {
+                    min: 0,
+                    max: 100,
+                    border: { display: true, color: '#334155', width: 1 },
+                    grid: { color: '#E2E8F0', drawTicks: true },
+                    ticks: { color: '#334155', padding: 8 }
+                },
+                x: {
+                    border: { display: true, color: '#334155', width: 1 },
+                    grid: { display: false, drawTicks: true },
+                    ticks: { color: '#334155', autoSkip: false, maxRotation: 0, minRotation: 0, padding: 6 }
+                }
             }
         }
     });
+    placerDeliberations(chart, graphique, i);
 });
 </script>
 @endsection

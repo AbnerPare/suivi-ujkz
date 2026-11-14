@@ -136,8 +136,18 @@ class BilanController extends Controller
             $groupes[$nom]['parcours'][$label]['lignes'][] = $ligne;
             $groupes[$nom]['rows']++;
         }
+        foreach ($groupes as &$groupe) {
+            foreach ($groupe['parcours'] as &$parcours) {
+                usort($parcours['lignes'], fn ($a, $b) => $a->ordre <=> $b->ordre);
+            }
+        }
+        unset($groupe, $parcours);
+        $adjointPresent = User::where('role', Roles::ADJOINT)
+            ->where('ufr_id', $bilan->departement->ufr_id)
+            ->where('actif', true)
+            ->exists();
 
-        return view('bilans.edit', compact('bilan', 'groupes'));
+        return view('bilans.edit', compact('bilan', 'groupes', 'adjointPresent'));
     }
 
     public function update(Request $request, Bilan $bilan)
@@ -194,7 +204,7 @@ class BilanController extends Controller
         abort_unless($bilan->editablePar($user), 403);
         $bilan->load('departement.ufr', 'lignes', 'periode');
 
-        if ($bilan->statut === 'brouillon') {
+        if ($bilan->statut === 'brouillon' && $request->input('choix') === 'adjoint') {
             $adjoint = User::where('role', Roles::ADJOINT)->where('ufr_id', $bilan->departement->ufr_id)->where('actif', true)->get();
             abort_if($adjoint->isEmpty(), 422, 'Aucun directeur adjoint n\'est affecté à cette UFR.');
             $this->changerStatut($bilan, $user, 'attente_adjoint', 'Transmission au directeur adjoint');
@@ -202,7 +212,8 @@ class BilanController extends Controller
             return redirect()->route('bilans.edit', $bilan)->with('ok', 'Bilan transmis au directeur adjoint.');
         }
 
-        if (in_array($bilan->statut, ['retour_correction', 'corrige'], true)) {
+        if (($bilan->statut === 'brouillon' && $request->input('choix') === 'officiel')
+            || in_array($bilan->statut, ['retour_correction', 'corrige'], true)) {
             $dip = User::where('role', Roles::DIP)->where('universite_id', $bilan->universite_id)->where('actif', true)->get();
             abort_if($dip->isEmpty(), 422, 'Aucun Directeur des Innovations Pédagogiques n\'est enregistré.');
             $destinataires = $dip->concat(

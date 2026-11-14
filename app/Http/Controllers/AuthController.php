@@ -34,7 +34,9 @@ class AuthController extends Controller
 
     public function identifiant()
     {
-        return view('compte.identifiant');
+        $profil = request()->user()->load('universite', 'ufr', 'departement');
+
+        return view('compte.identifiant', compact('profil'));
     }
 
     public function updateIdentifiant(Request $request)
@@ -53,7 +55,7 @@ class AuthController extends Controller
             Notifier::journal($request->user(), 'Modification de l\'identifiant de connexion', $email, $ancien);
         }
 
-        return back()->with('ok', 'Identifiant de connexion mis à jour. Utilisez cette adresse à la prochaine connexion.');
+        return back()->with('ok', 'Profil mis à jour. Utilisez cette adresse à la prochaine connexion.');
     }
 
     public function logout(Request $request)

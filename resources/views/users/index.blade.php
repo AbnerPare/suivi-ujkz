@@ -20,7 +20,21 @@
     <p data-consigne class="self-center text-sm text-slate-500 md:col-span-3"></p>
     <button class="rounded bg-ujkz px-3 py-2 font-semibold text-white">Créer le compte</button>
 </form>
+@if(auth()->user()->isAdmin())
+<form method="GET" action="{{ route('users.index') }}" class="mt-6 flex flex-wrap items-center gap-2">
+    <label for="type" class="text-sm font-medium">Type d'utilisateur</label>
+    <select id="type" name="type" class="rounded border border-slate-300 px-3 py-2" onchange="this.form.submit()">
+        <option value="">Tous les types</option>
+        @foreach($roles as $k => $label)
+            <option value="{{ $k }}" @selected($type === $k)>{{ $label }}</option>
+        @endforeach
+    </select>
+</form>
+@endif
 <div class="mt-6 space-y-3">
+@if($users->isEmpty())
+    <p class="rounded border bg-white px-4 py-8 text-center text-slate-500">Aucun compte de ce type.</p>
+@endif
 @foreach($users as $user)
     @php $ligne = 'user-'.$user->id; @endphp
     @if(! isset($roles[$user->role]))

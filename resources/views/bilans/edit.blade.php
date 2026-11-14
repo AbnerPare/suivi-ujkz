@@ -23,10 +23,11 @@
             <thead>@include('bilans._entete')</thead>
             <tbody>
             @forelse($groupes as $filiere)
-                @foreach($filiere['parcours'] as $pi => $parcours)
+                @foreach($filiere['parcours'] as $parcours)
                     @foreach($parcours['lignes'] as $li => $l)
                         @php
                             $ro = ! $bilan->editablePar($user);
+                            $semestresNiveau = \App\Models\Formation::semestresDuLibelle($parcours['nom']);
                         @endphp
                         <tr>
                             @if($loop->parent->first && $li === 0)
@@ -35,7 +36,7 @@
                             @if($li === 0)
                                 <td rowspan="{{ count($parcours['lignes']) }}" class="border border-slate-300 px-2 py-2 text-center align-middle">{{ $parcours['nom'] }}</td>
                             @endif
-                            <td class="border border-slate-300 px-2 py-2 text-center">S{{ $li + 1 }}</td>
+                            <td class="border border-slate-300 px-2 py-2 text-center">{{ $semestresNiveau[$li] ?? $l->semestre }}</td>
                             @foreach(['ec_total','ec_effectues'] as $f)
                                 <td class="border border-slate-300 px-2 py-2 text-center"><input type="number" min="0" name="lignes[{{ $l->id }}][{{ $f }}]" value="{{ old('lignes.'.$l->id.'.'.$f, $l->$f) }}" title="{{ $errors->first('lignes.'.$l->id.'.'.$f) }}" class="w-20 rounded border px-2 py-1 text-center @if($errors->has('lignes.'.$l->id.'.'.$f)) border-red-600 bg-red-50 text-red-700 underline decoration-red-600 decoration-2 @endif" @disabled($ro)></td>
                             @endforeach
@@ -73,16 +74,19 @@
     @endif
 </form>
 
-<div class="mt-4 flex flex-wrap gap-3">
-    @if($bilan->editablePar($user) && $bilan->statut === 'brouillon')
+<div class="mt-4 flex flex-wrap items-center gap-3">
+    @if($bilan->editablePar($user) && in_array($bilan->statut, ['brouillon', 'retour_correction', 'corrige']))
         <form method="POST" action="{{ route('bilans.transmettre', $bilan) }}">@csrf
-            <button class="rounded bg-ujkz px-4 py-2 font-semibold text-white">Transmettre au directeur adjoint</button>
-        </form>
-    @endif
-    @if($bilan->editablePar($user) && in_array($bilan->statut, ['retour_correction','corrige']))
-        <form method="POST" action="{{ route('bilans.transmettre', $bilan) }}">@csrf
+            <input type="hidden" name="choix" value="officiel">
             <button class="rounded bg-ujkz px-4 py-2 font-semibold text-white">Transmettre le bilan officiel</button>
         </form>
+    @endif
+    @if($bilan->editablePar($user) && $bilan->statut === 'brouillon' && $adjointPresent)
+        <form method="POST" action="{{ route('bilans.transmettre', $bilan) }}">@csrf
+            <input type="hidden" name="choix" value="adjoint">
+            <button class="rounded border border-ujkz px-4 py-2 font-semibold text-ujkz">Transmettre au directeur adjoint</button>
+        </form>
+        <p class="text-sm text-slate-500">Facultatif : la validation du directeur adjoint n'est pas obligatoire.</p>
     @endif
 </div>
 

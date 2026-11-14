@@ -9,6 +9,7 @@ use App\Models\BilanLigne;
 use App\Models\Campagne;
 use App\Models\Decision;
 use App\Models\Departement;
+use App\Models\Formation;
 use App\Models\Periode;
 use App\Models\Reunion;
 use App\Models\Ufr;
@@ -32,6 +33,15 @@ class DashboardController extends Controller
 
         $base = Bilan::visibleTo($user)->when($annee, fn ($q) => $q->where('annee_academique_id', $annee->id));
         $anneeBilans = (clone $base)->with('lignes', 'departement.ufr', 'periode')->get();
+        $structure = $request->query('structure');
+        if (! in_array($structure, ['ufr', 'institut'], true)) {
+            $structure = '';
+        }
+        if ($structure !== '') {
+            $anneeBilans = $anneeBilans
+                ->filter(fn (Bilan $bilan) => $this->typeStructure($bilan) === $structure)
+                ->values();
+        }
         $duMois = $periode ? $anneeBilans->where('periode_id', $periode->id) : $anneeBilans;
         $officiels = $duMois->where('statut', 'officiel');
         $source = $officiels->isNotEmpty() ? $officiels : $duMois->where('statut', '!=', 'brouillon');
@@ -72,12 +82,13 @@ class DashboardController extends Controller
 
                     return [
                         'id' => $ufr->id,
+                        'type' => $ufr->type === 'institut' ? 'institut' : 'ufr',
                         'nom' => trim(($ufr->sigle ? $ufr->sigle.' — ' : '').$ufr->nom),
                         'departements' => $groupe->count(),
                         'taux_cours' => $taux($groupe, 'cours'),
                         'taux_eval' => $taux($groupe, 'eval'),
                     ];
-                })->sortBy('nom', SORT_NATURAL | SORT_FLAG_CASE)->values();
+                })->sortBy([['type', 'desc'], ['nom', 'asc']])->values();
             $ufrOuverte = $request->filled('ufr_id')
                 ? $cartesUfr->firstWhere('id', (int) $request->query('ufr_id'))
                 : null;
@@ -124,7 +135,7 @@ class DashboardController extends Controller
             ->when(! $user->isAdmin(), fn ($q) => $q->where('universite_id', $user->universite_id))
             ->where('statut', 'programmee')->where('date_seance', '>=', now())->orderBy('date_seance')->first();
 
-        return view('dashboard', compact('stats', 'graphiques', 'cartesUfr', 'ufrOuverte', 'file', 'mesures', 'annees', 'annee', 'periodes', 'periode', 'nonLus', 'prochaine', 'source', 'departementChef', 'etablissement'));
+        return view('dashboard', compact('stats', 'graphiques', 'cartesUfr', 'ufrOuverte', 'file', 'mesures', 'annees', 'annee', 'periodes', 'periode', 'nonLus', 'prochaine', 'source', 'departementChef', 'etablissement', 'structure'));
     }
 
     private function graphiqueDepartement(Bilan $bilan, callable $taux): array
@@ -171,6 +182,7 @@ class DashboardController extends Controller
                     'departement' => $bilan->departement->nom,
                     'filiere' => $ligne->filiere,
                     'parcours' => $parcours,
+                    'deliberation' => (int) $ligne->deliberation,
                     'ordre' => $ligne->ordre,
                     'ec_total' => $ligne->ec_total,
                     'ec_effectues' => $ligne->ec_effectues,
@@ -181,26 +193,36 @@ class DashboardController extends Controller
         });
 
         $groupes = $lignes->groupBy(fn (array $ligne) => $ligne['departement'].'|'.$ligne['filiere'].'|'.$ligne['parcours'])
-            ->map(function ($rows) {
+            ->flatMap(function ($rows) {
                 $premier = $rows->first();
-                $cours = $rows->sum('ec_total');
-                $eval = $rows->sum('ec_a_evaluer');
+                $semestres = Formation::semestresDuLibelle($premier['parcours']);
 
-                return [
-                    'departement' => $premier['departement'],
-                    'filiere' => $premier['filiere'],
-                    'parcours' => $premier['parcours'],
-                    'ordre' => $rows->min('ordre'),
-                    'cours' => $cours > 0 ? (int) round($rows->sum('ec_effectues') / $cours * 100) : 0,
-                    'eval' => $eval > 0 ? (int) round($rows->sum('ec_evalues') / $eval * 100) : 0,
-                ];
+                return $rows->sortBy('ordre')->values()->map(function (array $row, int $index) use ($premier, $semestres) {
+                    $cours = (int) $row['ec_total'];
+                    $eval = (int) $row['ec_a_evaluer'];
+                    $semestre = $semestres[$index] ?? ('S'.($index + 1));
+
+                    return [
+                        'departement' => $premier['departement'],
+                        'filiere' => $premier['filiere'],
+                        'parcours' => $premier['parcours'],
+                        'semestre' => $semestre,
+                        'ordre' => $row['ordre'],
+                        'cours' => $cours > 0 ? (int) round($row['ec_effectues'] / $cours * 100) : 0,
+                        'eval' => $eval > 0 ? (int) round($row['ec_evalues'] / $eval * 100) : 0,
+                        'deliberations' => [[
+                            'semestre' => $semestre,
+                            'statut' => $this->statutDeliberation($row['deliberation']),
+                        ]],
+                    ];
+                });
             })
             ->sortBy([['departement', 'asc'], ['ordre', 'asc']])
             ->values();
 
         $plusieursDepartements = $nommerDepartement || $groupes->pluck('departement')->unique()->count() > 1;
         $doublons = $groupes->groupBy(fn (array $ligne) => $ligne['departement'].'|'.$ligne['parcours'])
-            ->filter(fn ($rows) => $rows->count() > 1);
+            ->filter(fn ($rows) => $rows->pluck('filiere')->unique()->count() > 1);
 
         return $groupes->map(function (array $ligne) use ($plusieursDepartements, $doublons) {
             $parties = [];
@@ -211,11 +233,13 @@ class DashboardController extends Controller
                 $parties[] = $ligne['filiere'];
             }
             $parties[] = $ligne['parcours'];
+            $parties[] = $ligne['semestre'];
 
             return [
-                'nom' => implode(' · ', $parties),
+                'nom' => $parties,
                 'cours' => $ligne['cours'],
                 'eval' => $ligne['eval'],
+                'deliberations' => $ligne['deliberations'],
             ];
         })->values();
     }
@@ -236,5 +260,19 @@ class DashboardController extends Controller
             'cours' => $ligne['cours'],
             'eval' => $ligne['eval'],
         ])->values();
+    }
+
+    private function typeStructure(Bilan $bilan): string
+    {
+        return $bilan->departement->ufr->type === 'institut' ? 'institut' : 'ufr';
+    }
+
+    private function statutDeliberation(int $valeur): string
+    {
+        return match ($valeur) {
+            1 => 'oui',
+            2 => 's-an',
+            default => 'non',
+        };
     }
 }
